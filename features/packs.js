@@ -122,19 +122,24 @@
       function locatePendingConsent() {
         if (!isPullsPage()) return null;
 
-        // Le widget de confirmation est toujours rendu dans le même conteneur que
-        // le champ masqué « website » : c'est le repère structurel stable qu'on
-        // utilise pour le retrouver, indépendamment du libellé affiché.
-        for (const checkbox of document.querySelectorAll('input[type="checkbox"]')) {
-          if (checkbox.closest('.wm-pulls-tools')) continue;
-
-          const block = checkbox.closest('label')?.parentElement;
+        // Le champ "website" est un honeypot invisible : il sert uniquement
+        // de repère pour retrouver le widget. Il ne doit jamais être manipulé.
+        for (const honeypot of document.querySelectorAll('input[name="website"]')) {
+          const hiddenLabel = honeypot.closest('label');
+          const block = hiddenLabel?.parentElement;
           if (!block) continue;
 
-          if (!block.querySelector('input[name="website"]')) continue;
+          const checkbox = [...block.querySelectorAll('input[type="checkbox"]')]
+            .find((input) => !input.closest('.wm-pulls-tools'));
+          if (!checkbox) continue;
 
-          const button = block.querySelector('button');
-          if (button) return { block, checkbox, button };
+          const button = [...block.querySelectorAll('button')]
+            .find((candidate) =>
+              normalizeTitle(candidate.textContent).toLocaleLowerCase('fr') === 'continuer'
+            ) || block.querySelector('button');
+          if (!button) continue;
+
+          return { block, checkbox, button };
         }
 
         return null;
@@ -169,10 +174,26 @@
                 // Une petite distraction occasionnelle avant de confirmer —
                 // notification, coup d'œil ailleurs — puis on s'y remet.
                 const commit = () => {
-                  if (!checkbox.isConnected) return;
+                  if (!checkbox.isConnected || !button.isConnected) return;
 
-                  if (!checkbox.checked) humanActivateCheckbox(checkbox);
-                  humanConfirmButton(button);
+                  if (!checkbox.checked) {
+                    humanActivateCheckbox(checkbox);
+                  }
+
+                  // React peut laisser le bouton disabled pendant quelques ticks.
+                  // On attend qu'il soit réellement cliquable avant de valider.
+                  waitFor(() => (
+                    checkbox.isConnected &&
+                    button.isConnected &&
+                    checkbox.checked &&
+                    !button.disabled
+                  ), {
+                    timeoutMs: 5000,
+                    onDone: (ready) => {
+                      if (!ready) return;
+                      humanConfirmButton(button);
+                    }
+                  });
                 };
 
                 if (Math.random() < 0.05) {
