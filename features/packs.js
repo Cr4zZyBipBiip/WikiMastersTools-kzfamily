@@ -32,6 +32,14 @@
       let autoOpenToggleInput = null;
       let autoOpenToggleLabel = null;
 
+      const acknowledgedChecks = new WeakSet();
+
+      const uiResponseProfile = {
+        responsePace: 1 + Math.random() * 1.4,
+        deliberation: 0.55 + Math.random() * 1.15,
+        settleDelay: 300 + Math.random() * 1500
+      };
+
       if (!runtime.settings.isEnabled('autoOpen')) {
         writeLocalValue(AUTO_OPEN_ENABLED_KEY, false);
         localStorage.removeItem(AUTO_OPEN_NEXT_AT_KEY);
