@@ -52,6 +52,7 @@ Puis cliquer sur **Recharger** dans `chrome://extensions/` et faire un F5 sur Wi
 
 *Heure de Paris*
 
+- **26/09/2026 — 21:31** — V4.15.4 : restauration de l’état manquant du widget de vérification `/pulls` après la modularisation (`acknowledgedChecks` et `uiResponseProfile`).
 - **26/09/2026 — 21:27** — V4.15.3 : correction de la vérification automatique sur `/pulls` : le champ honeypot `website` sert uniquement de repère, la vraie case est cochée puis l’extension attend que le bouton « Continuer » soit activé avant de le valider.
 - **25/09/2026 — 20:14** — V4.4 : amélioration des images manquantes avec des fallbacks 100 % ouverts et sans clé API : PokéAPI pour les Pokémon, Wikidata (image P18 / logo P154), puis Wikipedia/Wikimedia FR et EN. Les anciens échecs d’image sont invalidés pour être retestés.
 - **25/09/2026 — 19:13** — V4.3 : ajout d’un menu Paramètres sur `/pulls`, organisé par catégories, pour activer ou désactiver individuellement le design des cartes, Wikipédia/Wikimedia, les outils de prix et collection, les fonctions de paquets et l’estimation des échanges.
