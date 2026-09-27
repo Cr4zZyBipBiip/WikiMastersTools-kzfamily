@@ -132,10 +132,10 @@
       function applyMissingImageTitleFallback(card, placeholder, title) {
         if (!card?.isConnected || !placeholder?.isConnected || !title) return;
 
-        const artLayer = placeholder.closest(':scope, div[class*="top-0"][class*="h-[45%]"]')
-          || placeholder.closest('div[class*="top-0"][class*="h-[45%]"]');
+        const artLayer = placeholder.closest('div[class*="top-0"][class*="h-[45%]"]');
 
         card.classList.add('wm-missing-title-card');
+        artLayer?.classList.add('wm-missing-title-layer');
         card.classList.remove('wm-art-auto-fill');
         card.style.setProperty('--wm-art-url', 'none');
         card.style.setProperty('--wm-art-scale', '1');
@@ -149,7 +149,7 @@
         missingImageHost?.classList.add('wm-missing-title-host');
 
         const target = (
-          placeholder.closest('div[class*="top-0"][class*="h-[45%]"]')
+          artLayer
           || missingImageHost
           || missingImageFrame
           || card
@@ -621,12 +621,21 @@
             card.querySelector(':scope > .wm-wikipedia-card-button')?.remove();
           }
 
-          if (
-            missingImagesEnabled &&
-            card.dataset.wmMissingImageDone !== '1' &&
-            findMissingImagePlaceholder(card)
-          ) {
-            observer?.observe(card);
+          if (missingImagesEnabled) {
+            const missingPlaceholder = findMissingImagePlaceholder(card);
+
+            if (missingPlaceholder) {
+              const missingTitle = normalizeTitle(card.querySelector('h3')?.textContent);
+
+              if (card.dataset.wmMissingImageDone === '1') {
+                // Auto-réparation : une carte peut déjà avoir été marquée "sans image"
+                // avant l'ajout du fallback typographique. Tant que le logo WikiMasters
+                // est encore présent, on force le rendu texte.
+                applyMissingImageTitleFallback(card, missingPlaceholder, missingTitle);
+              } else {
+                observer?.observe(card);
+              }
+            }
           }
         }
       }

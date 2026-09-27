@@ -1188,27 +1188,29 @@
   aspect-ratio: auto !important;
 }
 
-.wm-premium-card.wm-missing-title-card > div[class*="top-0"][class*="h-[45%]"] {
+.wm-premium-card.wm-missing-title-card > div[class*="top-0"][class*="h-[45%]"],
+.wm-premium-card.wm-missing-title-card .wm-missing-title-layer {
   background:
     radial-gradient(
       circle at 24% 18%,
-      rgba(var(--wm-accent-rgb), 0.24),
+      rgba(var(--wm-accent-rgb), 0.30),
       transparent 34%
     ),
     radial-gradient(
       circle at 82% 42%,
-      rgba(var(--wm-accent-rgb), 0.12),
-      transparent 38%
+      rgba(var(--wm-accent-rgb), 0.16),
+      transparent 40%
     ),
     linear-gradient(
       145deg,
-      rgba(var(--wm-accent-rgb), 0.12) 0%,
-      rgb(var(--wm-image-mid-rgb)) 42%,
-      rgb(var(--wm-image-bottom-rgb)) 100%
+      rgba(var(--wm-accent-rgb), 0.14) 0%,
+      #171b22 48%,
+      #080a0e 100%
     ) !important;
 }
 
-.wm-premium-card.wm-missing-title-card > div[class*="top-0"][class*="h-[45%]"]::before {
+.wm-premium-card.wm-missing-title-card > div[class*="top-0"][class*="h-[45%]"]::before,
+.wm-premium-card.wm-missing-title-card .wm-missing-title-layer::before {
   background-image:
     linear-gradient(
       118deg,
@@ -1225,10 +1227,23 @@
   transform: none !important;
 }
 
+/* Neutralise le fondu calculé depuis le logo noir d'origine. */
+.wm-premium-card.wm-missing-title-card > div[class*="top-0"][class*="h-[45%]"]::after,
+.wm-premium-card.wm-missing-title-card .wm-missing-title-layer::after {
+  background:
+    linear-gradient(
+      to bottom,
+      rgba(8, 10, 14, 0.18) 0%,
+      rgba(8, 10, 14, 0.04) 30%,
+      rgba(8, 10, 14, 0.10) 58%,
+      rgba(8, 10, 14, 0.72) 100%
+    ) !important;
+}
+
 .wm-missing-title-art {
   position: absolute;
   inset: 0;
-  z-index: 6;
+  z-index: 12;
   display: flex;
   align-items: center;
   justify-content: center;

@@ -52,6 +52,7 @@ Puis cliquer sur **Recharger** dans `chrome://extensions/` et faire un F5 sur Wi
 
 *Heure de Paris*
 
+- **27/09/2026 — 20:20** — V4.15.12 : correction du fallback des cartes réellement sans image : auto-réparation des cartes déjà marquées sans image, injection forcée du titre à la place du logo et fond indépendant de la palette noire calculée depuis le logo WikiMasters.
 - **27/09/2026 — 20:12** — V4.15.11 : le titre principal des cartes full-art reprend désormais automatiquement la couleur de leur rareté, comme la bordure et les autres accents visuels.
 - **27/09/2026 — 20:06** — V4.15.10 : lorsqu’aucune image native, Wikidata ou Wikimedia n’est disponible, le logo WikiMasters est masqué et remplacé par un artwork typographique utilisant le nom de la carte, automatiquement dimensionné selon sa longueur et teinté avec la couleur de rareté.
 - **27/09/2026 — 19:55** — V4.15.9 : correction des images Wikidata/Wikimedia utilisées quand une carte n’a pas d’image native : suppression des contraintes du placeholder (`w-[52%]`, `max-w`, ratio 4:3) afin que l’image de remplacement occupe toute la couche full-art et profite correctement du recadrage/zoom adaptatif.
