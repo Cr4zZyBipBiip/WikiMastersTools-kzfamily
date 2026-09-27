@@ -179,9 +179,11 @@
 
         const titleEl = document.createElement('span');
         titleEl.className = 'wm-missing-title-art-text';
-        titleEl.textContent = title;
 
-        const length = [...title].length;
+        const displayTitle = title.trim().split(/\s+/)[0] || title;
+        titleEl.textContent = displayTitle;
+
+        const length = [...displayTitle].length;
         if (length <= 18) {
           fallback.classList.add('wm-missing-title-short');
         } else if (length <= 34) {
