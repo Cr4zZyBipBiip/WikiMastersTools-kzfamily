@@ -52,6 +52,7 @@ Puis cliquer sur **Recharger** dans `chrome://extensions/` et faire un F5 sur Wi
 
 *Heure de Paris*
 
+- **27/09/2026 — 12:29** — V4.15.5 : le bouton Paramètres apparaît désormais sur toutes les pages où le compteur WikiBidous est présent et clignote tant qu’il n’a jamais été cliqué ; ce signal est ensuite désactivé définitivement dans le stockage local.
 - **26/09/2026 — 21:31** — V4.15.4 : restauration de l’état manquant du widget de vérification `/pulls` après la modularisation (`acknowledgedChecks` et `uiResponseProfile`).
 - **26/09/2026 — 21:27** — V4.15.3 : correction de la vérification automatique sur `/pulls` : le champ honeypot `website` sert uniquement de repère, la vraie case est cochée puis l’extension attend que le bouton « Continuer » soit activé avant de le valider.
 - **25/09/2026 — 20:14** — V4.4 : amélioration des images manquantes avec des fallbacks 100 % ouverts et sans clé API : PokéAPI pour les Pokémon, Wikidata (image P18 / logo P154), puis Wikipedia/Wikimedia FR et EN. Les anciens échecs d’image sont invalidés pour être retestés.

@@ -2137,6 +2137,27 @@ div[class*="glow-"]:has(> div[class*="top-0"][class*="h-[45%]"] img):has(h3):not
   color: #f5efff;
 }
 
+.wm-settings-launch.wm-settings-launch-attention {
+  animation: wm-settings-attention-blink 0.9s ease-in-out infinite;
+}
+
+@keyframes wm-settings-attention-blink {
+  0%,
+  100% {
+    opacity: 1;
+    border-color: rgba(191, 148, 255, 0.78);
+    background: rgba(191, 148, 255, 0.18);
+    box-shadow: 0 0 0 rgba(191, 148, 255, 0);
+  }
+
+  50% {
+    opacity: 0.42;
+    border-color: rgba(191, 148, 255, 0.34);
+    background: rgba(191, 148, 255, 0.06);
+    box-shadow: 0 0 12px rgba(191, 148, 255, 0.36);
+  }
+}
+
 .wm-settings-launch-icon {
   font-size: 13px;
   line-height: 1;

@@ -10,6 +10,8 @@
       } = runtime.core;
 
       function renderAll() {
+        runtime.settings.ensureButton();
+
         if (isCollectionPage()) {
           runtime.collectionBulk.ensureToolbar();
           runtime.collectionBulk.ensurePriceLegend();
@@ -21,7 +23,6 @@
         }
 
         if (isPullsPage()) {
-          runtime.settings.ensureButton();
           runtime.packs.ensurePullsToolbar();
           runtime.packs.updateAutoOpenToggleUi();
           runtime.pullStats.renderPullStats();
@@ -57,6 +58,7 @@
           isTradesPage() ||
           isGlobalCollectionPage() ||
           isGuildPage() ||
+          Boolean(document.querySelector('button[aria-label="Ouvrir la boutique WikiBidous"]')) ||
           Boolean(document.querySelector('div[class*="glow-"] h3'))
         );
       }

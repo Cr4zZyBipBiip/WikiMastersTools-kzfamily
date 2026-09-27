@@ -4,6 +4,7 @@
   registry.settings = {
     create(core) {
       const SETTINGS_KEY = 'wm_feature_settings_v1';
+      const SETTINGS_BUTTON_SEEN_KEY = 'wm_settings_button_seen_v1';
 
       const DEFAULTS = Object.freeze({
         premiumCards: true,
@@ -65,7 +66,7 @@
         }
       ];
 
-      const { readLocalValue, writeLocalValue, isPullsPage, normalizeTitle } = core;
+      const { readLocalValue, writeLocalValue, normalizeTitle } = core;
 
       function getSettings() {
         const saved = readLocalValue(SETTINGS_KEY);
@@ -245,12 +246,6 @@
       function ensureButton() {
         const existingSlot = document.getElementById('wm-settings-currency-slot');
 
-        if (!isPullsPage()) {
-          existingSlot?.remove();
-          document.getElementById('wm-settings-button')?.remove();
-          return;
-        }
-
         const currencyButtons = [
           ...document.querySelectorAll('button[aria-label="Ouvrir la boutique WikiBidous"]')
         ];
@@ -266,7 +261,11 @@
           (button) => button.getClientRects().length > 0
         );
 
-        if (!currencyButton?.parentElement) return;
+        if (!currencyButton?.parentElement) {
+          existingSlot?.remove();
+          document.getElementById('wm-settings-button')?.remove();
+          return;
+        }
 
         const host = currencyButton.parentElement;
         let slot = existingSlot;
@@ -296,8 +295,17 @@
           text.textContent = 'Paramètres';
 
           button.append(icon, text);
-          button.addEventListener('click', openSettings);
+          button.addEventListener('click', () => {
+            writeLocalValue(SETTINGS_BUTTON_SEEN_KEY, true);
+            button.classList.remove('wm-settings-launch-attention');
+            openSettings();
+          });
         }
+
+        button.classList.toggle(
+          'wm-settings-launch-attention',
+          readLocalValue(SETTINGS_BUTTON_SEEN_KEY) !== true
+        );
 
         if (button.parentElement !== slot) {
           slot.append(button);
@@ -306,6 +314,7 @@
 
       return {
         SETTINGS_KEY,
+        SETTINGS_BUTTON_SEEN_KEY,
         DEFAULTS,
         getSettings,
         isEnabled,
