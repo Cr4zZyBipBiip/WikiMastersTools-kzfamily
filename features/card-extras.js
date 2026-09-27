@@ -157,18 +157,25 @@
         missingImageFrame?.classList.add('wm-missing-title-frame');
         missingImageHost?.classList.add('wm-missing-title-host');
 
-        const target = (
-          artLayer
-          || missingImageHost
-          || missingImageFrame
-          || card
-        );
-
-        target.querySelector(':scope > .wm-missing-title-art')?.remove();
+        // Le fallback texte est ajouté directement à la carte, pas dans le
+        // wrapper image du site. Cela évite toutes les règles génériques
+        // `> div { ... !important }` qui écrasaient son positionnement/z-index.
+        card.querySelector(':scope > .wm-missing-title-art')?.remove();
+        artLayer?.querySelector(':scope > .wm-missing-title-art')?.remove();
 
         const fallback = document.createElement('div');
         fallback.className = 'wm-missing-title-art';
         fallback.setAttribute('aria-hidden', 'true');
+        fallback.style.setProperty('position', 'absolute', 'important');
+        fallback.style.setProperty('top', '0', 'important');
+        fallback.style.setProperty('left', '0', 'important');
+        fallback.style.setProperty('right', '0', 'important');
+        fallback.style.setProperty('height', '59%', 'important');
+        fallback.style.setProperty('z-index', '39', 'important');
+        fallback.style.setProperty('display', 'flex', 'important');
+        fallback.style.setProperty('align-items', 'center', 'important');
+        fallback.style.setProperty('justify-content', 'center', 'important');
+        fallback.style.setProperty('pointer-events', 'none', 'important');
 
         const titleEl = document.createElement('span');
         titleEl.className = 'wm-missing-title-art-text';
@@ -185,8 +192,12 @@
           fallback.classList.add('wm-missing-title-xlong');
         }
 
+        titleEl.style.setProperty('position', 'relative', 'important');
+        titleEl.style.setProperty('z-index', '1', 'important');
+        titleEl.style.setProperty('color', 'var(--wm-accent)', 'important');
+
         fallback.append(titleEl);
-        target.append(fallback);
+        card.append(fallback);
       }
 
       async function ensureMissingImageForCard(card) {

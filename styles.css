@@ -1166,7 +1166,7 @@
 
 /* v4.15.10 — aucune image disponible : le nom devient l'artwork */
 .wm-premium-card.wm-missing-title-card {
-  --wm-missing-title-ink: color-mix(in srgb, var(--wm-accent) 78%, white 22%);
+  --wm-missing-title-ink: color-mix(in srgb, var(--wm-accent) 88%, white 12%);
 }
 
 .wm-premium-card.wm-missing-title-card .wm-missing-title-logo {
@@ -1204,8 +1204,8 @@
     linear-gradient(
       145deg,
       rgba(var(--wm-accent-rgb), 0.14) 0%,
-      #171b22 48%,
-      #080a0e 100%
+      #242a34 48%,
+      #11151c 100%
     ) !important;
 }
 
@@ -1240,21 +1240,27 @@
     ) !important;
 }
 
-.wm-premium-card.wm-missing-title-card .wm-missing-title-art {
+.wm-premium-card.wm-missing-title-card > .wm-missing-title-art {
   position: absolute !important;
-  inset: 0 !important;
-  z-index: 25 !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: auto !important;
+  width: 100% !important;
+  height: 59% !important;
+  z-index: 39 !important;
   display: flex !important;
-  align-items: center;
-  justify-content: center;
-  padding: 52px 22px 138px !important;
-  pointer-events: none;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 48px 22px 18px !important;
+  box-sizing: border-box !important;
+  pointer-events: none !important;
   text-align: center;
   isolation: isolate;
 }
 
-.wm-premium-card.wm-missing-title-card .wm-missing-title-art::before,
-.wm-premium-card.wm-missing-title-card .wm-missing-title-art::after {
+.wm-premium-card.wm-missing-title-card > .wm-missing-title-art::before,
+.wm-premium-card.wm-missing-title-card > .wm-missing-title-art::after {
   content: "";
   position: absolute;
   left: 50%;
@@ -1271,15 +1277,15 @@
   box-shadow: 0 0 10px rgba(var(--wm-accent-rgb), 0.24);
 }
 
-.wm-premium-card.wm-missing-title-card .wm-missing-title-art::before {
+.wm-premium-card.wm-missing-title-card > .wm-missing-title-art::before {
   top: 25%;
 }
 
-.wm-premium-card.wm-missing-title-card .wm-missing-title-art::after {
+.wm-premium-card.wm-missing-title-card > .wm-missing-title-art::after {
   bottom: 31%;
 }
 
-.wm-premium-card.wm-missing-title-card .wm-missing-title-art-text {
+.wm-premium-card.wm-missing-title-card > .wm-missing-title-art .wm-missing-title-art-text {
   position: relative;
   z-index: 2;
   display: block;
