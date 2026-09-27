@@ -1240,20 +1240,21 @@
     ) !important;
 }
 
-.wm-missing-title-art {
-  position: absolute;
-  inset: 0;
-  z-index: 12;
-  display: flex;
+.wm-premium-card.wm-missing-title-card .wm-missing-title-art {
+  position: absolute !important;
+  inset: 0 !important;
+  z-index: 25 !important;
+  display: flex !important;
   align-items: center;
   justify-content: center;
-  padding: 46px 24px 120px;
+  padding: 52px 22px 138px !important;
   pointer-events: none;
   text-align: center;
+  isolation: isolate;
 }
 
-.wm-missing-title-art::before,
-.wm-missing-title-art::after {
+.wm-premium-card.wm-missing-title-card .wm-missing-title-art::before,
+.wm-premium-card.wm-missing-title-card .wm-missing-title-art::after {
   content: "";
   position: absolute;
   left: 50%;
@@ -1270,15 +1271,17 @@
   box-shadow: 0 0 10px rgba(var(--wm-accent-rgb), 0.24);
 }
 
-.wm-missing-title-art::before {
-  top: 29%;
+.wm-premium-card.wm-missing-title-card .wm-missing-title-art::before {
+  top: 25%;
 }
 
-.wm-missing-title-art::after {
-  bottom: 36%;
+.wm-premium-card.wm-missing-title-card .wm-missing-title-art::after {
+  bottom: 31%;
 }
 
-.wm-missing-title-art-text {
+.wm-premium-card.wm-missing-title-card .wm-missing-title-art-text {
+  position: relative;
+  z-index: 2;
   display: block;
   max-width: 100%;
   color: var(--wm-missing-title-ink);
@@ -1970,6 +1973,17 @@ body.wm-compact-mode main div[class*="glow-"]:has(h3) {
 }
 
 /* Zone texte sur l'artwork. */
+.wm-premium-card.wm-missing-title-card > div[class*="top-[45%]"] {
+  background:
+    linear-gradient(
+      to top,
+      rgba(8, 10, 14, 0.98) 0%,
+      rgba(14, 17, 23, 0.94) 35%,
+      rgba(var(--wm-accent-rgb), 0.15) 76%,
+      rgba(var(--wm-accent-rgb), 0.04) 100%
+    ) !important;
+}
+
 .wm-premium-card > div[class*="top-[45%]"] {
   top: auto !important;
   left: 0 !important;

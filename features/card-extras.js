@@ -141,6 +141,15 @@
         card.style.setProperty('--wm-art-scale', '1');
         card.style.setProperty('--wm-art-hover-scale', '1');
 
+        // Le logo par défaut rendait la palette presque noire. Une carte sans
+        // image reçoit donc une palette neutre dédiée, tandis que l'accent
+        // continue de venir de sa rareté.
+        card.style.setProperty('--wm-image-top-rgb', '34, 38, 48');
+        card.style.setProperty('--wm-image-top-soft-rgb', '44, 49, 61');
+        card.style.setProperty('--wm-image-mid-rgb', '22, 25, 33');
+        card.style.setProperty('--wm-image-bottom-rgb', '10, 12, 17');
+        card.style.setProperty('--wm-image-bottom-soft-rgb', '17, 20, 27');
+
         placeholder.classList.add('wm-missing-title-logo');
 
         const missingImageFrame = placeholder.parentElement;
