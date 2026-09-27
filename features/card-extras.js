@@ -197,20 +197,53 @@
           const horizontalPadding =
             (parseFloat(fallbackStyle.paddingLeft) || 0) +
             (parseFloat(fallbackStyle.paddingRight) || 0);
+          const verticalPadding =
+            (parseFloat(fallbackStyle.paddingTop) || 0) +
+            (parseFloat(fallbackStyle.paddingBottom) || 0);
+
           const availableWidth = Math.max(1, fallback.clientWidth - horizontalPadding);
+          const availableHeight = Math.max(1, fallback.clientHeight - verticalPadding);
+          const maxLines = 3;
+          const minFontSize = 12;
+          const maxFontSize = 42;
 
-          // On mesure d'abord le mot à une taille confortable, puis on réduit
-          // exactement ce qu'il faut pour qu'il tienne sur une seule ligne.
-          const maxFontSize = 38;
-          titleEl.style.setProperty('font-size', `${maxFontSize}px`, 'important');
-          titleEl.style.setProperty('white-space', 'nowrap', 'important');
-          titleEl.style.setProperty('width', 'max-content', 'important');
-          titleEl.style.setProperty('max-width', 'none', 'important');
+          titleEl.style.setProperty('width', '100%', 'important');
+          titleEl.style.setProperty('max-width', '100%', 'important');
+          titleEl.style.setProperty('white-space', 'normal', 'important');
+          titleEl.style.setProperty('text-wrap', 'balance', 'important');
+          titleEl.style.setProperty('overflow-wrap', 'normal', 'important');
+          titleEl.style.setProperty('word-break', 'normal', 'important');
 
-          const naturalWidth = Math.max(1, titleEl.getBoundingClientRect().width);
-          const fittedSize = Math.min(maxFontSize, maxFontSize * (availableWidth / naturalWidth));
+          const fits = (fontSize) => {
+            titleEl.style.setProperty('font-size', `${fontSize}px`, 'important');
 
-          titleEl.style.setProperty('font-size', `${fittedSize.toFixed(2)}px`, 'important');
+            const rect = titleEl.getBoundingClientRect();
+            const lineHeight = fontSize * 0.98;
+            const lineCount = Math.max(1, Math.round(rect.height / lineHeight));
+
+            return (
+              titleEl.scrollWidth <= availableWidth + 1 &&
+              rect.height <= availableHeight + 1 &&
+              lineCount <= maxLines
+            );
+          };
+
+          let low = minFontSize;
+          let high = maxFontSize;
+          let best = minFontSize;
+
+          for (let i = 0; i < 9; i += 1) {
+            const candidate = (low + high) / 2;
+
+            if (fits(candidate)) {
+              best = candidate;
+              low = candidate;
+            } else {
+              high = candidate;
+            }
+          }
+
+          titleEl.style.setProperty('font-size', `${best.toFixed(2)}px`, 'important');
         };
 
         requestAnimationFrame(() => {
