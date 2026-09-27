@@ -180,7 +180,7 @@
         const titleEl = document.createElement('span');
         titleEl.className = 'wm-missing-title-art-text';
 
-        const displayTitle = title.trim().split(/\s+/)[0] || title;
+        const displayTitle = title.trim() || title;
         titleEl.textContent = displayTitle;
 
         titleEl.style.setProperty('position', 'relative', 'important');
