@@ -391,6 +391,11 @@
         const resetPointer = () => {
           card.style.setProperty('--wm-pointer-x', '50%');
           card.style.setProperty('--wm-pointer-y', '35%');
+          card.style.setProperty('--wm-foil-x', '50%');
+          card.style.setProperty('--wm-foil-y', '50%');
+          card.style.setProperty('--wm-foil-angle', '112deg');
+          card.style.setProperty('--wm-foil-shift-x', '50%');
+          card.style.setProperty('--wm-foil-shift-y', '50%');
           card.style.setProperty('--wm-tilt-x', '0deg');
           card.style.setProperty('--wm-tilt-y', '0deg');
         };
@@ -402,10 +407,27 @@
           const x = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
           const y = Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height));
     
+          const tiltX = (x - 0.5) * 10;
+          const tiltY = (0.5 - y) * 10;
+
+          // Le reflet suit la normale de la carte : en inclinant la carte,
+          // la bande holographique traverse réellement la surface au lieu
+          // de rester figée sous le curseur.
+          const foilX = 50 + (x - 0.5) * 92;
+          const foilY = 50 + (y - 0.5) * 92;
+          const foilAngle = 112 + (x - 0.5) * 34 - (y - 0.5) * 22;
+          const foilShiftX = 50 + (x - 0.5) * 62;
+          const foilShiftY = 50 + (y - 0.5) * 42;
+
           card.style.setProperty('--wm-pointer-x', `${(x * 100).toFixed(1)}%`);
           card.style.setProperty('--wm-pointer-y', `${(y * 100).toFixed(1)}%`);
-          card.style.setProperty('--wm-tilt-x', `${((x - 0.5) * 10).toFixed(2)}deg`);
-          card.style.setProperty('--wm-tilt-y', `${((0.5 - y) * 10).toFixed(2)}deg`);
+          card.style.setProperty('--wm-foil-x', `${foilX.toFixed(1)}%`);
+          card.style.setProperty('--wm-foil-y', `${foilY.toFixed(1)}%`);
+          card.style.setProperty('--wm-foil-angle', `${foilAngle.toFixed(1)}deg`);
+          card.style.setProperty('--wm-foil-shift-x', `${foilShiftX.toFixed(1)}%`);
+          card.style.setProperty('--wm-foil-shift-y', `${foilShiftY.toFixed(1)}%`);
+          card.style.setProperty('--wm-tilt-x', `${tiltX.toFixed(2)}deg`);
+          card.style.setProperty('--wm-tilt-y', `${tiltY.toFixed(2)}deg`);
         };
     
         resetPointer();

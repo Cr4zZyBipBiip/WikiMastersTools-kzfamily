@@ -1473,6 +1473,11 @@ body.wm-compact-mode main div[class*="glow-"]:has(h3) {
 .wm-premium-card {
   --wm-pointer-x: 50%;
   --wm-pointer-y: 35%;
+  --wm-foil-x: 50%;
+  --wm-foil-y: 50%;
+  --wm-foil-angle: 112deg;
+  --wm-foil-shift-x: 50%;
+  --wm-foil-shift-y: 50%;
   --wm-tilt-x: 0deg;
   --wm-tilt-y: 0deg;
   --wm-art-top: 52px;
@@ -1482,7 +1487,7 @@ body.wm-compact-mode main div[class*="glow-"]:has(h3) {
   --wm-art-url: none;
   --wm-accent: #cbd5e1;
   --wm-accent-rgb: 203, 213, 225;
-  --wm-foil-opacity: 0.07;
+  --wm-foil-hover-opacity: 0.24;
   --wm-glow-size: 10px;
   --wm-image-top-rgb: 190, 195, 198;
   --wm-image-top-soft-rgb: 222, 225, 227;
@@ -1492,7 +1497,7 @@ body.wm-compact-mode main div[class*="glow-"]:has(h3) {
 
   isolation: isolate !important;
   overflow: hidden !important;
-  border: 1px solid rgba(255, 255, 255, 0.16) !important;
+  border: 1.5px solid rgba(var(--wm-accent-rgb), 0.74) !important;
   border-radius: 18px !important;
   background:
     linear-gradient(
@@ -1504,8 +1509,8 @@ body.wm-compact-mode main div[class*="glow-"]:has(h3) {
     ) !important;
   box-shadow:
     0 12px 28px rgba(0, 0, 0, 0.46),
-    0 0 var(--wm-glow-size) rgba(var(--wm-accent-rgb), 0.30),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.10) !important;
+    0 0 var(--wm-glow-size) rgba(var(--wm-accent-rgb), 0.24),
+    inset 0 0 0 1px rgba(var(--wm-accent-rgb), 0.22) !important;
   transform:
     perspective(880px)
     rotateX(var(--wm-tilt-y))
@@ -1539,42 +1544,42 @@ body.wm-compact-mode main div[class*="glow-"]:has(h3) {
 .wm-premium-card.glow-l {
   --wm-accent: #ffd45a;
   --wm-accent-rgb: 255, 212, 90;
-  --wm-foil-opacity: 0.44;
+  --wm-foil-hover-opacity: 0.58;
   --wm-glow-size: 32px;
 }
 
 .wm-premium-card.glow-ur {
-  --wm-accent: #f7c84b;
-  --wm-accent-rgb: 247, 200, 75;
-  --wm-foil-opacity: 0.36;
+  --wm-accent: #ff9f43;
+  --wm-accent-rgb: 255, 159, 67;
+  --wm-foil-hover-opacity: 0.50;
   --wm-glow-size: 28px;
 }
 
 .wm-premium-card.glow-sr {
   --wm-accent: #c98cff;
   --wm-accent-rgb: 201, 140, 255;
-  --wm-foil-opacity: 0.25;
+  --wm-foil-hover-opacity: 0.42;
   --wm-glow-size: 22px;
 }
 
 .wm-premium-card.glow-r {
   --wm-accent: #64bfff;
   --wm-accent-rgb: 100, 191, 255;
-  --wm-foil-opacity: 0.17;
+  --wm-foil-hover-opacity: 0.34;
   --wm-glow-size: 17px;
 }
 
 .wm-premium-card.glow-pc {
   --wm-accent: #6ee7ad;
   --wm-accent-rgb: 110, 231, 173;
-  --wm-foil-opacity: 0.11;
+  --wm-foil-hover-opacity: 0.28;
   --wm-glow-size: 13px;
 }
 
 .wm-premium-card.glow-c {
   --wm-accent: #b7c1ce;
   --wm-accent-rgb: 183, 193, 206;
-  --wm-foil-opacity: 0.07;
+  --wm-foil-hover-opacity: 0.22;
   --wm-glow-size: 10px;
 }
 
@@ -1915,40 +1920,60 @@ body.wm-compact-mode main div[class*="glow-"]:has(h3) {
     0 0 10px rgba(var(--wm-accent-rgb), 0.22) !important;
 }
 
-/* Film holographique qui suit le curseur. */
+/* Foil holographique : invisible au repos, réflexion dynamique au hover. */
 .wm-premium-card::before {
   content: "";
   position: absolute;
   inset: 0;
   z-index: 32;
   pointer-events: none;
-  opacity: var(--wm-foil-opacity);
+  opacity: 0;
   background:
     radial-gradient(
-      ellipse at var(--wm-pointer-x) var(--wm-pointer-y),
-      rgba(255, 255, 255, 0.84) 0 1.4%,
-      rgba(255, 255, 255, 0.16) 7%,
-      transparent 22%
+      circle at var(--wm-foil-x) var(--wm-foil-y),
+      rgba(255, 255, 255, 0.86) 0%,
+      rgba(255, 255, 255, 0.34) 5%,
+      rgba(255, 255, 255, 0.10) 13%,
+      transparent 28%
     ),
     linear-gradient(
-      112deg,
-      transparent 17%,
-      rgba(255, 106, 190, 0.52) 33%,
-      rgba(255, 230, 103, 0.60) 41%,
-      rgba(93, 255, 215, 0.52) 50%,
-      rgba(79, 194, 255, 0.58) 59%,
-      rgba(165, 109, 255, 0.54) 68%,
-      transparent 83%
+      var(--wm-foil-angle),
+      transparent 8%,
+      rgba(255, 72, 151, 0.10) 18%,
+      rgba(255, 126, 76, 0.30) 28%,
+      rgba(255, 232, 112, 0.38) 38%,
+      rgba(100, 255, 190, 0.34) 48%,
+      rgba(85, 213, 255, 0.38) 58%,
+      rgba(122, 124, 255, 0.34) 68%,
+      rgba(211, 107, 255, 0.30) 78%,
+      rgba(255, 92, 160, 0.12) 88%,
+      transparent 96%
+    ),
+    repeating-linear-gradient(
+      var(--wm-foil-angle),
+      transparent 0 9%,
+      rgba(255, 255, 255, 0.055) 10% 10.8%,
+      transparent 12% 20%
     );
+  background-size:
+    100% 100%,
+    185% 185%,
+    145% 145%;
+  background-position:
+    center,
+    var(--wm-foil-shift-x) var(--wm-foil-shift-y),
+    var(--wm-foil-shift-y) var(--wm-foil-shift-x);
   mix-blend-mode: screen;
-  transition: opacity 160ms ease;
+  filter: saturate(1.28) contrast(1.08);
+  transition: opacity 120ms ease;
+  will-change: opacity, background-position;
 }
 
 .wm-premium-card:hover::before {
-  opacity: calc(var(--wm-foil-opacity) + 0.16);
+  opacity: var(--wm-foil-hover-opacity);
 }
 
-/* Bordure iridescente. */
+/* Bordure métallique basée uniquement sur la rareté. */
 .wm-premium-card::after {
   content: "";
   position: absolute;
@@ -1958,31 +1983,27 @@ body.wm-compact-mode main div[class*="glow-"]:has(h3) {
   border-radius: inherit;
   padding: 1.5px;
   background:
-    conic-gradient(
-      from 205deg,
-      var(--wm-accent),
-      #fff1a0 10%,
-      #5fe6ff 20%,
-      #a27dff 32%,
-      #ff86c7 43%,
-      #ffe079 55%,
-      #70ffd6 69%,
-      #58c7ff 80%,
-      #ff9ccf 91%,
-      var(--wm-accent)
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--wm-accent) 78%, white 22%) 0%,
+      var(--wm-accent) 28%,
+      color-mix(in srgb, var(--wm-accent) 78%, black 22%) 52%,
+      var(--wm-accent) 72%,
+      color-mix(in srgb, var(--wm-accent) 70%, white 30%) 100%
     );
   -webkit-mask:
     linear-gradient(#000 0 0) content-box,
     linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
-  opacity: 0.88;
-  filter: drop-shadow(0 0 4px rgba(var(--wm-accent-rgb), 0.34));
+  opacity: 0.96;
+  filter: drop-shadow(0 0 4px rgba(var(--wm-accent-rgb), 0.30));
+  transition: filter 160ms ease, opacity 160ms ease;
 }
 
 .wm-premium-card:hover::after {
   opacity: 1;
-  filter: drop-shadow(0 0 6px rgba(var(--wm-accent-rgb), 0.52));
+  filter: drop-shadow(0 0 7px rgba(var(--wm-accent-rgb), 0.56));
 }
 
 @media (hover: none), (pointer: coarse) {
@@ -1991,8 +2012,9 @@ body.wm-compact-mode main div[class*="glow-"]:has(h3) {
     transform: none !important;
   }
 
-  .wm-premium-card::before {
-    opacity: calc(var(--wm-foil-opacity) * 0.80);
+  .wm-premium-card::before,
+  .wm-premium-card:hover::before {
+    opacity: 0 !important;
   }
 }
 
