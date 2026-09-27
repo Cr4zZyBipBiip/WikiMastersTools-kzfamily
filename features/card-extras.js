@@ -129,6 +129,57 @@
         }
       }
     
+      function applyMissingImageTitleFallback(card, placeholder, title) {
+        if (!card?.isConnected || !placeholder?.isConnected || !title) return;
+
+        const artLayer = placeholder.closest(':scope, div[class*="top-0"][class*="h-[45%]"]')
+          || placeholder.closest('div[class*="top-0"][class*="h-[45%]"]');
+
+        card.classList.add('wm-missing-title-card');
+        card.classList.remove('wm-art-auto-fill');
+        card.style.setProperty('--wm-art-url', 'none');
+        card.style.setProperty('--wm-art-scale', '1');
+        card.style.setProperty('--wm-art-hover-scale', '1');
+
+        placeholder.classList.add('wm-missing-title-logo');
+
+        const missingImageFrame = placeholder.parentElement;
+        const missingImageHost = missingImageFrame?.parentElement;
+        missingImageFrame?.classList.add('wm-missing-title-frame');
+        missingImageHost?.classList.add('wm-missing-title-host');
+
+        const target = (
+          placeholder.closest('div[class*="top-0"][class*="h-[45%]"]')
+          || missingImageHost
+          || missingImageFrame
+          || card
+        );
+
+        target.querySelector(':scope > .wm-missing-title-art')?.remove();
+
+        const fallback = document.createElement('div');
+        fallback.className = 'wm-missing-title-art';
+        fallback.setAttribute('aria-hidden', 'true');
+
+        const titleEl = document.createElement('span');
+        titleEl.className = 'wm-missing-title-art-text';
+        titleEl.textContent = title;
+
+        const length = [...title].length;
+        if (length <= 18) {
+          fallback.classList.add('wm-missing-title-short');
+        } else if (length <= 34) {
+          fallback.classList.add('wm-missing-title-medium');
+        } else if (length <= 56) {
+          fallback.classList.add('wm-missing-title-long');
+        } else {
+          fallback.classList.add('wm-missing-title-xlong');
+        }
+
+        fallback.append(titleEl);
+        target.append(fallback);
+      }
+
       async function ensureMissingImageForCard(card) {
         if (!card?.isConnected) return;
         if (card.dataset.wmMissingImageLoading === '1') return;
@@ -150,6 +201,7 @@
           if (entry?.found) {
             applyResolvedMissingImage(card, placeholder, title, entry);
           } else {
+            applyMissingImageTitleFallback(card, placeholder, title);
             card.dataset.wmMissingImageDone = '1';
           }
         } catch (error) {

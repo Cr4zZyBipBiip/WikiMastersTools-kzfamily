@@ -52,6 +52,7 @@ Puis cliquer sur **Recharger** dans `chrome://extensions/` et faire un F5 sur Wi
 
 *Heure de Paris*
 
+- **27/09/2026 — 20:06** — V4.15.10 : lorsqu’aucune image native, Wikidata ou Wikimedia n’est disponible, le logo WikiMasters est masqué et remplacé par un artwork typographique utilisant le nom de la carte, automatiquement dimensionné selon sa longueur et teinté avec la couleur de rareté.
 - **27/09/2026 — 19:55** — V4.15.9 : correction des images Wikidata/Wikimedia utilisées quand une carte n’a pas d’image native : suppression des contraintes du placeholder (`w-[52%]`, `max-w`, ratio 4:3) afin que l’image de remplacement occupe toute la couche full-art et profite correctement du recadrage/zoom adaptatif.
 - **27/09/2026 — 19:41** — V4.15.8 : les overlays natifs des cartes shiny (L+) sont fortement allégés sur le design full-art afin de laisser l’image visible ; le reflet shiny reste discret au repos et légèrement plus présent au survol.
 - **27/09/2026 — 19:34** — V4.15.7 : amélioration du full-art pour les images avec beaucoup de marge/fond autour du sujet : détection automatique de la zone réellement occupée par l’illustration et zoom adaptatif de l’image nette, sans sur-recadrer les artworks déjà bien remplis.
