@@ -5,6 +5,46 @@
     create(deps) {
       const { normalizeTitle, idByTitle, cardMetaById, imageResolver, isMarketplacePage, isFeatureEnabled } = deps;
       let cardExtrasObserver = null;
+      let premiumPaletteObserver = null;
+      const premiumPaletteJobs = new WeakMap();
+
+      function isCollectionRoute() {
+        return location.pathname === '/collection' || location.pathname.startsWith('/collection/');
+      }
+
+      function ensurePremiumPaletteObserver() {
+        if (premiumPaletteObserver) return premiumPaletteObserver;
+
+        premiumPaletteObserver = new IntersectionObserver((entries) => {
+          for (const entry of entries) {
+            if (!entry.isIntersecting) continue;
+
+            const card = entry.target;
+            premiumPaletteObserver.unobserve(card);
+
+            const job = premiumPaletteJobs.get(card);
+            premiumPaletteJobs.delete(card);
+            job?.();
+          }
+        }, {
+          root: null,
+          rootMargin: '720px 0px',
+          threshold: 0
+        });
+
+        return premiumPaletteObserver;
+      }
+
+      function schedulePremiumPalette(card, job) {
+        if (!isCollectionRoute()) {
+          job();
+          return;
+        }
+
+        premiumPaletteJobs.set(card, job);
+        ensurePremiumPaletteObserver().observe(card);
+      }
+
       function wikipediaUrlFor(title, meta = null) {
         if (meta?.wikipediaUrl) return meta.wikipediaUrl;
         const normalized = normalizeTitle(title);
@@ -132,6 +172,15 @@
       function applyMissingImageTitleFallback(card, placeholder, title) {
         if (!card?.isConnected || !placeholder?.isConnected || !title) return;
 
+        const existingFallback = card.querySelector(':scope > .wm-missing-title-art');
+        if (
+          existingFallback &&
+          card.classList.contains('wm-missing-title-card') &&
+          existingFallback.dataset.wmTitle === title
+        ) {
+          return;
+        }
+
         const artLayer = placeholder.closest('div[class*="top-0"][class*="h-[45%]"]');
 
         card.classList.add('wm-missing-title-card');
@@ -165,6 +214,7 @@
 
         const fallback = document.createElement('div');
         fallback.className = 'wm-missing-title-art';
+        fallback.dataset.wmTitle = title;
         fallback.setAttribute('aria-hidden', 'true');
         fallback.style.setProperty('position', 'absolute', 'important');
         fallback.style.setProperty('top', '0', 'important');
@@ -426,6 +476,9 @@
     
         function applyImagePalette() {
           if (!artImage.naturalWidth || !artImage.naturalHeight) return;
+
+          const paletteSrc = String(artImage.currentSrc || artImage.src || '');
+          if (paletteSrc && card.dataset.wmPaletteSrc === paletteSrc) return;
     
           try {
             const canvas = document.createElement('canvas');
@@ -489,6 +542,10 @@
             setRgb('--wm-image-mid-rgb', midDark);
             setRgb('--wm-image-bottom-rgb', bottomDark);
             setRgb('--wm-image-bottom-soft-rgb', bottomSoft);
+
+            if (paletteSrc) {
+              card.dataset.wmPaletteSrc = paletteSrc;
+            }
           } catch (error) {
             console.debug('[WM Average] palette image indisponible', error);
           }
@@ -502,7 +559,7 @@
           }
     
           applyImageFormat();
-          applyImagePalette();
+          schedulePremiumPalette(card, applyImagePalette);
           revealPremiumCard();
         }
     
@@ -522,7 +579,16 @@
         const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)');
         if (reduceMotion?.matches) return;
     
+        let pointerFrame = 0;
+        let pointerClientX = 0;
+        let pointerClientY = 0;
+
         const resetPointer = () => {
+          if (pointerFrame) {
+            cancelAnimationFrame(pointerFrame);
+            pointerFrame = 0;
+          }
+
           card.style.setProperty('--wm-pointer-x', '50%');
           card.style.setProperty('--wm-pointer-y', '35%');
           card.style.setProperty('--wm-foil-x', '50%');
@@ -533,20 +599,18 @@
           card.style.setProperty('--wm-tilt-x', '0deg');
           card.style.setProperty('--wm-tilt-y', '0deg');
         };
-    
-        const updatePointer = (event) => {
+
+        const renderPointer = () => {
+          pointerFrame = 0;
+
           const rect = card.getBoundingClientRect();
           if (!rect.width || !rect.height) return;
-    
-          const x = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
-          const y = Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height));
-    
+
+          const x = Math.max(0, Math.min(1, (pointerClientX - rect.left) / rect.width));
+          const y = Math.max(0, Math.min(1, (pointerClientY - rect.top) / rect.height));
+
           const tiltX = (x - 0.5) * 10;
           const tiltY = (0.5 - y) * 10;
-
-          // Le reflet suit la normale de la carte : en inclinant la carte,
-          // la bande holographique traverse réellement la surface au lieu
-          // de rester figée sous le curseur.
           const foilX = 50 + (x - 0.5) * 92;
           const foilY = 50 + (y - 0.5) * 92;
           const foilAngle = 112 + (x - 0.5) * 34 - (y - 0.5) * 22;
@@ -563,7 +627,16 @@
           card.style.setProperty('--wm-tilt-x', `${tiltX.toFixed(2)}deg`);
           card.style.setProperty('--wm-tilt-y', `${tiltY.toFixed(2)}deg`);
         };
-    
+
+        const updatePointer = (event) => {
+          pointerClientX = event.clientX;
+          pointerClientY = event.clientY;
+
+          if (!pointerFrame) {
+            pointerFrame = requestAnimationFrame(renderPointer);
+          }
+        };
+
         resetPointer();
         card.addEventListener('pointermove', updatePointer, { passive: true });
         card.addEventListener('pointerleave', resetPointer, { passive: true });
@@ -575,9 +648,12 @@
         const wikipediaEnabled = isFeatureEnabled('wikipediaButtons');
         const missingImagesEnabled = isFeatureEnabled('missingImages');
         const observer = missingImagesEnabled ? ensureCardExtrasObserver() : null;
+        const collectionRoute = isCollectionRoute();
 
         for (const card of document.querySelectorAll('div[class*="glow-"]')) {
           if (!card.querySelector('h3')) continue;
+
+          card.classList.toggle('wm-collection-card', collectionRoute);
 
           if (premiumEnabled) {
             ensurePremiumCardFx(card);

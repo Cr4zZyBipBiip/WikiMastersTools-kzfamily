@@ -1654,6 +1654,12 @@ body.wm-compact-mode main div[class*="glow-"]:has(h3) {
   }
 }
 
+/* Collection : rendu identique, coût réduit pour les cartes loin de l'écran. */
+.wm-premium-card.wm-collection-card {
+  content-visibility: auto;
+  contain-intrinsic-size: 288px 420px;
+}
+
 /* v4.2 — cartes full-art holographiques */
 .wm-premium-card {
   --wm-pointer-x: 50%;
@@ -1703,7 +1709,6 @@ body.wm-compact-mode main div[class*="glow-"]:has(h3) {
     translateZ(0) !important;
   transform-style: preserve-3d;
   transform-origin: center;
-  will-change: transform, box-shadow;
   transition:
     transform 180ms cubic-bezier(.2, .75, .25, 1),
     box-shadow 220ms ease,
@@ -1712,6 +1717,7 @@ body.wm-compact-mode main div[class*="glow-"]:has(h3) {
 
 .wm-premium-card:hover {
   z-index: 50 !important;
+  will-change: transform, box-shadow;
   box-shadow:
     0 18px 40px rgba(0, 0, 0, 0.58),
     0 0 calc(var(--wm-glow-size) * 1.7) rgba(var(--wm-accent-rgb), 0.52),
@@ -2162,11 +2168,11 @@ body.wm-compact-mode main div[class*="glow-"]:has(h3) {
   mix-blend-mode: screen;
   filter: saturate(1.28) contrast(1.08);
   transition: opacity 120ms ease;
-  will-change: opacity, background-position;
 }
 
 .wm-premium-card:hover::before {
   opacity: var(--wm-foil-hover-opacity);
+  will-change: opacity, background-position;
 }
 
 /* Bordure métallique basée uniquement sur la rareté. */

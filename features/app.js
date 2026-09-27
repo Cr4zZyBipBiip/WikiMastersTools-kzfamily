@@ -100,7 +100,7 @@
             '.wm-average-badge, .wm-tools-bar, .wm-modal-overlay, .wm-marketplace-average-wrap, ' +
             '.wm-pulls-tools, .wm-pulls-info, .wm-pack-recap, .wm-trade-values-panel, ' +
             '.wm-trade-values-controls, #wm-open-all-overlay, .wm-pull-stats, ' +
-            '.wm-wikipedia-card-button, .wm-missing-image-credit, .wm-compact-tools, .wm-price-legend, ' +
+            '.wm-wikipedia-card-button, .wm-missing-image-credit, .wm-missing-title-art, .wm-compact-tools, .wm-price-legend, ' +
             '.wm-auto-open-control, .wm-auto-open-help, .wm-settings-launch, .wm-settings-modal'
           )
         );
