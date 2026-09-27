@@ -1129,6 +1129,41 @@
   opacity: 1 !important;
 }
 
+/*
+ * Les placeholders sans image du site enferment normalement le logo dans
+ * un cadre ~52 % de large. Quand ce logo est remplacé par Wikidata/Wikimedia,
+ * on libère complètement ces wrappers pour que l'image puisse devenir full-art.
+ */
+.wm-premium-card.wm-missing-image-fullart .wm-missing-image-host {
+  position: absolute !important;
+  inset: 0 !important;
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+.wm-premium-card.wm-missing-image-fullart .wm-missing-image-frame {
+  position: absolute !important;
+  inset: 0 !important;
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  aspect-ratio: auto !important;
+}
+
+.wm-premium-card.wm-missing-image-fullart .wm-replaced-missing-image {
+  max-width: none !important;
+  opacity: 1 !important;
+}
+
 .wm-missing-image-credit {
   position: absolute;
   top: calc(45% - 19px);

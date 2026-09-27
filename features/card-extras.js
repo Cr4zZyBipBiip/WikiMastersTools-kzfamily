@@ -94,6 +94,13 @@
         if (!card?.isConnected || !placeholder?.isConnected || !entry?.found || !entry.url) return;
     
         placeholder.classList.add('wm-replaced-missing-image');
+        card.classList.add('wm-missing-image-fullart');
+
+        const missingImageFrame = placeholder.parentElement;
+        const missingImageHost = missingImageFrame?.parentElement;
+        missingImageFrame?.classList.add('wm-missing-image-frame');
+        missingImageHost?.classList.add('wm-missing-image-host');
+
         placeholder.dataset.wmOriginalSrc = placeholder.getAttribute('src') || '';
         placeholder.dataset.wmOriginalSrcset = placeholder.getAttribute('srcset') || '';
         placeholder.src = entry.url;
