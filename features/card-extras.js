@@ -269,6 +269,7 @@
           if (ratio < 0.82) {
             card.classList.add('wm-art-portrait');
             card.dataset.wmArtFormat = 'portrait';
+            card.dataset.wmArtBaseScale = '1';
             card.style.setProperty('--wm-art-top', '8px');
             card.style.setProperty('--wm-art-scale', '1');
             card.style.setProperty('--wm-art-hover-scale', '1.02');
@@ -276,16 +277,18 @@
           } else if (ratio < 1.12) {
             card.classList.add('wm-art-square');
             card.dataset.wmArtFormat = 'square';
-            card.style.setProperty('--wm-art-top', '26px');
-            card.style.setProperty('--wm-art-scale', '1');
-            card.style.setProperty('--wm-art-hover-scale', '1.018');
+            card.dataset.wmArtBaseScale = '1.04';
+            card.style.setProperty('--wm-art-top', '20px');
+            card.style.setProperty('--wm-art-scale', '1.04');
+            card.style.setProperty('--wm-art-hover-scale', '1.06');
             card.style.setProperty('--wm-blur-y', '35%');
           } else {
             card.classList.add('wm-art-landscape');
             card.dataset.wmArtFormat = 'landscape';
-            card.style.setProperty('--wm-art-top', '52px');
-            card.style.setProperty('--wm-art-scale', '1');
-            card.style.setProperty('--wm-art-hover-scale', '1.015');
+            card.dataset.wmArtBaseScale = '1.10';
+            card.style.setProperty('--wm-art-top', '38px');
+            card.style.setProperty('--wm-art-scale', '1.10');
+            card.style.setProperty('--wm-art-hover-scale', '1.12');
             card.style.setProperty('--wm-blur-y', '32%');
           }
         }
@@ -304,6 +307,105 @@
             if (!context) return;
             context.drawImage(artImage, 0, 0, width, height);
             const pixels = context.getImageData(0, 0, width, height).data;
+
+            // Détecte les illustrations avec beaucoup de "vide" autour du sujet
+            // (fond uni / marges importantes). Dans ce cas on agrandit seulement
+            // la photo nette afin de conserver un vrai rendu full-art.
+            const sampleRegion = (x0, y0, x1, y1) => {
+              let r = 0;
+              let g = 0;
+              let b = 0;
+              let count = 0;
+
+              for (let y = y0; y < y1; y += 1) {
+                for (let x = x0; x < x1; x += 1) {
+                  const i = (y * width + x) * 4;
+                  if (pixels[i + 3] < 100) continue;
+                  r += pixels[i];
+                  g += pixels[i + 1];
+                  b += pixels[i + 2];
+                  count += 1;
+                }
+              }
+
+              return count ? [r / count, g / count, b / count] : [0, 0, 0];
+            };
+
+            const cornerSize = 9;
+            const cornerColors = [
+              sampleRegion(0, 0, cornerSize, cornerSize),
+              sampleRegion(width - cornerSize, 0, width, cornerSize),
+              sampleRegion(0, height - cornerSize, cornerSize, height),
+              sampleRegion(width - cornerSize, height - cornerSize, width, height)
+            ];
+
+            const isBackgroundPixel = (r, g, b, alpha) => {
+              if (alpha < 100) return true;
+              return cornerColors.some((corner) => (
+                colorDistance([r, g, b], corner) < 42
+              ));
+            };
+
+            let backgroundPixels = 0;
+            let minX = width;
+            let minY = height;
+            let maxX = -1;
+            let maxY = -1;
+
+            for (let y = 0; y < height; y += 1) {
+              for (let x = 0; x < width; x += 1) {
+                const i = (y * width + x) * 4;
+                const background = isBackgroundPixel(
+                  pixels[i],
+                  pixels[i + 1],
+                  pixels[i + 2],
+                  pixels[i + 3]
+                );
+
+                if (background) {
+                  backgroundPixels += 1;
+                  continue;
+                }
+
+                minX = Math.min(minX, x);
+                minY = Math.min(minY, y);
+                maxX = Math.max(maxX, x);
+                maxY = Math.max(maxY, y);
+              }
+            }
+
+            const totalPixels = width * height;
+            const backgroundRatio = backgroundPixels / totalPixels;
+            const hasContentBounds = maxX >= minX && maxY >= minY;
+
+            if (backgroundRatio >= 0.36 && hasContentBounds) {
+              const contentWidthRatio = (maxX - minX + 1) / width;
+              const contentHeightRatio = (maxY - minY + 1) / height;
+              const baseScale = Math.max(1, Number(card.dataset.wmArtBaseScale) || 1);
+
+              const widthFillScale = 0.78 / Math.max(0.42, contentWidthRatio);
+              const heightFillScale = 0.72 / Math.max(0.48, contentHeightRatio);
+              const autoScale = Math.min(
+                1.52,
+                Math.max(baseScale, widthFillScale, heightFillScale)
+              );
+
+              if (autoScale > baseScale + 0.035) {
+                card.classList.add('wm-art-auto-fill');
+                card.style.setProperty('--wm-art-scale', autoScale.toFixed(3));
+                card.style.setProperty('--wm-art-hover-scale', Math.min(1.56, autoScale * 1.018).toFixed(3));
+
+                // Plus on zoome, plus on remonte légèrement l'illustration pour
+                // éviter que le sujet soit repoussé sous la zone de texte.
+                const currentTop = parseFloat(getComputedStyle(card).getPropertyValue('--wm-art-top')) || 0;
+                const topCorrection = Math.min(18, (autoScale - baseScale) * 42);
+                card.style.setProperty('--wm-art-top', `${Math.max(2, currentTop - topCorrection).toFixed(1)}px`);
+              } else {
+                card.classList.remove('wm-art-auto-fill');
+              }
+            } else {
+              card.classList.remove('wm-art-auto-fill');
+            }
     
             const top = averagePixels(
               pixels,
