@@ -1987,7 +1987,7 @@ body.wm-compact-mode main div[class*="glow-"]:has(h3) {
 
 .wm-premium-card > div[class*="top-[45%]"] h3 {
   margin: 0 0 3px !important;
-  color: #fff2c6 !important;
+  color: var(--wm-accent) !important;
   font-size: 14px !important;
   line-height: 1 !important;
   font-weight: 900 !important;
