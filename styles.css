@@ -1288,38 +1288,22 @@
 .wm-premium-card.wm-missing-title-card > .wm-missing-title-art .wm-missing-title-art-text {
   position: relative;
   z-index: 2;
-  display: block;
-  max-width: 100%;
+  display: inline-block;
+  width: max-content;
+  max-width: none;
+  white-space: nowrap;
   color: var(--wm-missing-title-ink);
   font-family: var(--font-heading, Georgia, serif);
   font-weight: 950;
   line-height: 0.94;
   letter-spacing: -0.045em;
-  text-wrap: balance;
-  overflow-wrap: anywhere;
+  text-wrap: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
   text-shadow:
     0 2px 2px rgba(0, 0, 0, 0.95),
     0 5px 18px rgba(0, 0, 0, 0.72),
     0 0 20px rgba(var(--wm-accent-rgb), 0.26);
-}
-
-.wm-missing-title-short .wm-missing-title-art-text {
-  font-size: 34px;
-}
-
-.wm-missing-title-medium .wm-missing-title-art-text {
-  font-size: 28px;
-}
-
-.wm-missing-title-long .wm-missing-title-art-text {
-  font-size: 22px;
-  line-height: 1;
-}
-
-.wm-missing-title-xlong .wm-missing-title-art-text {
-  font-size: 17px;
-  line-height: 1.04;
-  letter-spacing: -0.025em;
 }
 
 .wm-premium-card:hover .wm-missing-title-art-text {

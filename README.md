@@ -52,6 +52,7 @@ Puis cliquer sur **Recharger** dans `chrome://extensions/` et faire un F5 sur Wi
 
 *Heure de Paris*
 
+- **27/09/2026 — 20:55** — V4.15.17 : le mot affiché à la place d’une image manquante reste désormais toujours sur une seule ligne ; sa taille est calculée dynamiquement selon la largeur réelle disponible et recalculée après chargement de la police.
 - **27/09/2026 — 20:48** — V4.15.16 : annulation du zoom adaptatif ajouté en V4.15.7 : suppression de la détection automatique des grandes marges/fonds et retour aux cadrages fixes portrait/carré/paysage de V4.15.6, sans toucher aux améliorations ajoutées ensuite.
 - **27/09/2026 — 20:41** — V4.15.15 : sur les cartes sans aucune image disponible, l’artwork typographique n’affiche désormais que le premier mot du nom de la carte pour un rendu plus simple et plus lisible.
 - **27/09/2026 — 20:36** — V4.15.14 : le fallback texte des cartes sans image est désormais une couche directe de la carte, indépendante du wrapper image WikiMasters et de ses règles `!important`. Le nom est forcé au premier plan dans la zone haute, avec la couleur de rareté et un fond dédié plus lisible.

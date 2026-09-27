@@ -183,23 +183,42 @@
         const displayTitle = title.trim().split(/\s+/)[0] || title;
         titleEl.textContent = displayTitle;
 
-        const length = [...displayTitle].length;
-        if (length <= 18) {
-          fallback.classList.add('wm-missing-title-short');
-        } else if (length <= 34) {
-          fallback.classList.add('wm-missing-title-medium');
-        } else if (length <= 56) {
-          fallback.classList.add('wm-missing-title-long');
-        } else {
-          fallback.classList.add('wm-missing-title-xlong');
-        }
-
         titleEl.style.setProperty('position', 'relative', 'important');
         titleEl.style.setProperty('z-index', '1', 'important');
         titleEl.style.setProperty('color', 'var(--wm-accent)', 'important');
 
         fallback.append(titleEl);
         card.append(fallback);
+
+        const fitMissingTitle = () => {
+          if (!fallback.isConnected || !titleEl.isConnected) return;
+
+          const fallbackStyle = getComputedStyle(fallback);
+          const horizontalPadding =
+            (parseFloat(fallbackStyle.paddingLeft) || 0) +
+            (parseFloat(fallbackStyle.paddingRight) || 0);
+          const availableWidth = Math.max(1, fallback.clientWidth - horizontalPadding);
+
+          // On mesure d'abord le mot à une taille confortable, puis on réduit
+          // exactement ce qu'il faut pour qu'il tienne sur une seule ligne.
+          const maxFontSize = 38;
+          titleEl.style.setProperty('font-size', `${maxFontSize}px`, 'important');
+          titleEl.style.setProperty('white-space', 'nowrap', 'important');
+          titleEl.style.setProperty('width', 'max-content', 'important');
+          titleEl.style.setProperty('max-width', 'none', 'important');
+
+          const naturalWidth = Math.max(1, titleEl.getBoundingClientRect().width);
+          const fittedSize = Math.min(maxFontSize, maxFontSize * (availableWidth / naturalWidth));
+
+          titleEl.style.setProperty('font-size', `${fittedSize.toFixed(2)}px`, 'important');
+        };
+
+        requestAnimationFrame(() => {
+          fitMissingTitle();
+
+          // La police heading peut finir de charger après le premier layout.
+          document.fonts?.ready?.then(fitMissingTitle).catch(() => {});
+        });
       }
 
       async function ensureMissingImageForCard(card) {
