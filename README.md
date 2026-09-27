@@ -52,6 +52,7 @@ Puis cliquer sur **Recharger** dans `chrome://extensions/` et faire un F5 sur Wi
 
 *Heure de Paris*
 
+- **27/09/2026 — 19:41** — V4.15.8 : les overlays natifs des cartes shiny (L+) sont fortement allégés sur le design full-art afin de laisser l’image visible ; le reflet shiny reste discret au repos et légèrement plus présent au survol.
 - **27/09/2026 — 19:34** — V4.15.7 : amélioration du full-art pour les images avec beaucoup de marge/fond autour du sujet : détection automatique de la zone réellement occupée par l’illustration et zoom adaptatif de l’image nette, sans sur-recadrer les artworks déjà bien remplis.
 - **27/09/2026 — 19:27** — V4.15.6 : refonte du full-art : suppression du voile arc-en-ciel au repos, foil holographique visible uniquement au survol et synchronisé avec l’inclinaison 3D de la carte, plus bordures métalliques colorées selon la rareté (L/UR/SR/R/PC/C).
 - **27/09/2026 — 12:29** — V4.15.5 : le bouton Paramètres apparaît désormais sur toutes les pages où le compteur WikiBidous est présent et clignote tant qu’il n’a jamais été cliqué ; ce signal est ensuite désactivé définitivement dans le stockage local.

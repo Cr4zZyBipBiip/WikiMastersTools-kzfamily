@@ -2482,3 +2482,42 @@ div[class*="glow-"]:has(> div[class*="top-0"][class*="h-[45%]"] img):has(h3):not
   white-space: nowrap;
   pointer-events: none;
 }
+
+/* v4.15.8 — shiny L+ : effet natif allégé sur les cartes full-art */
+.wm-premium-card.glow-shiny .shiny-onyx-tint {
+  opacity: 0.16 !important;
+}
+
+.wm-premium-card.glow-shiny .shiny-onyx-shade {
+  opacity: 0.10 !important;
+}
+
+.wm-premium-card.glow-shiny .shiny-onyx-lines {
+  opacity: 0.08 !important;
+}
+
+.wm-premium-card.glow-shiny .shiny-onyx-wash {
+  opacity: 0.12 !important;
+}
+
+.wm-premium-card.glow-shiny .shiny-onyx-light.shiny-at-rest {
+  opacity: 0.06 !important;
+}
+
+.wm-premium-card.glow-shiny .shiny-onyx-light.shiny-on-hover {
+  opacity: 0.18 !important;
+}
+
+.wm-premium-card.glow-shiny .shiny-onyx-glare.shiny-at-rest {
+  opacity: 0.05 !important;
+}
+
+.wm-premium-card.glow-shiny .shiny-onyx-glare.shiny-on-hover {
+  opacity: 0.14 !important;
+}
+
+/* Le voile noir natif ne doit plus ternir l'image full-art. */
+.wm-premium-card.glow-shiny > div[class*="top-0"][class*="h-[45%]"] {
+  background: rgba(0, 0, 0, 0.08) !important;
+}
+
