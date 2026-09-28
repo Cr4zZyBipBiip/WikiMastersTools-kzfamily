@@ -18,6 +18,7 @@
     'packs',
     'ranking',
     'collectionBulk',
+    'extraTools',
     'app'
   ];
 
@@ -97,6 +98,7 @@
   runtime.packs = featureRegistry.packs.create(runtime);
   runtime.ranking = featureRegistry.ranking.create(runtime);
   runtime.collectionBulk = featureRegistry.collectionBulk.create(runtime);
+  runtime.extraTools = featureRegistry.extraTools.create(runtime);
   runtime.app = featureRegistry.app.create(runtime);
 
   runtime.app.startObserver();
