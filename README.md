@@ -52,12 +52,9 @@ Puis cliquer sur **Recharger** dans `chrome://extensions/` et faire un F5 sur Wi
 
 *Heure de Paris*
 
-- **28/09/2026** — Correction de l’ouverture automatique des paquets.
-- **28/09/2026** — Intervalle personnalisable pour l’ouverture automatique des paquets.
-- **27/09/2026** — Amélioration des performances de la collection.
-- **27/09/2026** — Mise à jour du style des cartes.
-- **25/09/2026** — Ajout des paramètres pour personnaliser l’extension.
-- **25/09/2026** — Amélioration de la gestion des cartes sans image.
+- **28/09/2026** — Nouveaux outils pour les cartes, les échanges et les notifications, avec davantage de réglages pour les paquets.
+- **27/09/2026** — Mise à jour du style et des performances des cartes.
+- **25/09/2026** — Ajout des paramètres et amélioration des cartes sans image.
 - **24/09/2026** — Ajout de l’ouverture automatique et du récapitulatif des paquets.
 - **23/09/2026** — Extension disponible sur Firefox, Brave et Opera.
 - **21/09/2026** — Ajout des outils de vente, de classement et d’estimation des échanges.
