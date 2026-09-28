@@ -47,6 +47,7 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
       'features/packs.js',
       'features/ranking.js',
       'features/collection-bulk.js',
+      'features/extra-tools.js',
       'features/app.js',
       'content.js'
     ];
