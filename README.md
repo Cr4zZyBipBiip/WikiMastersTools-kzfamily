@@ -52,6 +52,7 @@ Puis cliquer sur **Recharger** dans `chrome://extensions/` et faire un F5 sur Wi
 
 *Heure de Paris*
 
+- **28/09/2026** — Intervalle personnalisable pour l’ouverture automatique des paquets.
 - **27/09/2026** — Amélioration des performances de la collection.
 - **27/09/2026** — Mise à jour du style des cartes.
 - **25/09/2026** — Ajout des paramètres pour personnaliser l’extension.
