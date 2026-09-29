@@ -5,7 +5,7 @@
     create(runtime) {
       const {
         originalFetch, emitCollection, isMarketplaceDetailApi, isPacksOpenApi,
-        isTradesApi, isGlobalCardsApi, captureGlobalCardsRequest,
+        isTradesApi, isGlobalCardsApi, captureSupabaseRequest, captureGlobalCardsRequest,
         getGlobalCollectionSummaryCardId, emitGlobalCollectionInspectedCard,
         emitGlobalCatalogue, emitTrades, fetchTrades,
         emitMarketplaceDetail, emitPackOpened
@@ -13,6 +13,7 @@
 
       window.fetch = (...args) => {
         try {
+          captureSupabaseRequest(args[0], args[1] || {});
           captureGlobalCardsRequest(args[0], args[1] || {});
         } catch (_) {}
         const fetchPromise = originalFetch(...args);
@@ -47,13 +48,26 @@
       if (OriginalXHR) {
         const origOpen = OriginalXHR.prototype.open;
         const origSend = OriginalXHR.prototype.send;
+        const origSetRequestHeader = OriginalXHR.prototype.setRequestHeader;
 
         OriginalXHR.prototype.open = function(method, url, ...rest) {
           this.__wmUrl = typeof url === 'string' ? url : String(url || '');
+          this.__wmHeaders = {};
           return origOpen.call(this, method, url, ...rest);
         };
 
+        OriginalXHR.prototype.setRequestHeader = function(name, value) {
+          try {
+            this.__wmHeaders ||= {};
+            this.__wmHeaders[String(name)] = String(value);
+          } catch (_) {}
+          return origSetRequestHeader.call(this, name, value);
+        };
+
         OriginalXHR.prototype.send = function(...args) {
+          try {
+            captureSupabaseRequest(this.__wmUrl, { headers: this.__wmHeaders || {} });
+          } catch (_) {}
           if (
             this.__wmUrl &&
             (
