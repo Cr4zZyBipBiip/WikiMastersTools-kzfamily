@@ -65,7 +65,9 @@
       }
 
       function writeFamilies(families) {
-        writeLocalValue(STORAGE_KEY, families);
+        if (!writeLocalValue(STORAGE_KEY, families)) {
+          throw new Error('Impossible d’enregistrer les Familles dans le stockage local du navigateur.');
+        }
       }
 
       function getFamily(id) {
@@ -566,13 +568,32 @@ LIMIT ${MAX_SEMANTIC_TITLES}
       }
 
       async function resolveWikiMastersTitles(titles, directCards, report) {
-        const list = [...titles].slice(0, MAX_SEMANTIC_TITLES);
+        const direct = Array.isArray(directCards) ? directCards : [];
+        const directTitles = new Set(direct.map((card) => normalize(card?.title)).filter(Boolean));
+        const list = [...titles]
+          .filter((title) => !directTitles.has(normalize(title)))
+          .slice(0, MAX_SEMANTIC_TITLES);
+
+        const merged = new Map();
+        for (const card of direct) {
+          if (card?.id && card?.title) merged.set(card.id, card);
+        }
+
+        if (!list.length) {
+          report({
+            stage: 'resolve',
+            percent: 82,
+            title: 'WikiMasters',
+            detail: `Toutes les cartes ont déjà été résolues par la recherche directe.`
+          });
+          return [...merged.values()];
+        }
 
         report({
           stage: 'resolve',
           percent: 52,
           title: 'WikiMasters',
-          detail: `Correspondance de ${list.length.toLocaleString('fr-FR')} titres par lots…`
+          detail: `Correspondance de ${list.length.toLocaleString('fr-FR')} titres restants par lots…`
         });
 
         const result = await bridgeRequest(
@@ -584,7 +605,9 @@ LIMIT ${MAX_SEMANTIC_TITLES}
             progressName: 'wm-average-family-resolve-progress',
             onProgress: (progress) => {
               const ratio = progress.batches
-                ? progress.batch / progress.batches
+                ? progress.completedBatches
+                  ? progress.completedBatches / progress.batches
+                  : progress.batch / progress.batches
                 : 0;
               const percent = 52 + Math.round(ratio * 30);
 
@@ -604,20 +627,20 @@ LIMIT ${MAX_SEMANTIC_TITLES}
                   stage: 'resolve',
                   percent: Math.max(percent, 78),
                   title: 'WikiMasters — récupération',
-                  detail: `Nouveau passage sur les lots échoués : ${progress.recoveryIndex}/${progress.recoveryTotal} • ${(progress.matchedCards || 0).toLocaleString('fr-FR')} cartes récupérées`
+                  detail: `Récupération des lots problématiques • ${(progress.matchedCards || 0).toLocaleString('fr-FR')} cartes récupérées`
                 });
                 return;
               }
 
               const failedCopy = progress.failedBatches
-                ? ` • ${progress.failedBatches} lot(s) à réessayer`
+                ? ` • ${progress.failedBatches} lot(s) à récupérer`
                 : '';
 
               report({
                 stage: 'resolve',
                 percent,
                 title: 'WikiMasters',
-                detail: `Lot ${progress.batch}/${progress.batches} • ${(progress.matchedCards || 0).toLocaleString('fr-FR')} cartes trouvées${failedCopy}`
+                detail: `${progress.completedBatches || progress.batch}/${progress.batches} lots • ${(progress.matchedCards || 0).toLocaleString('fr-FR')} cartes trouvées${failedCopy}`
               });
             }
           }
@@ -632,13 +655,11 @@ LIMIT ${MAX_SEMANTIC_TITLES}
             stage: 'resolve',
             percent: 82,
             title: 'WikiMasters',
-            detail: `${(result.cards?.length || 0).toLocaleString('fr-FR')} cartes récupérées • ${result.failedBatches} lot(s) toujours indisponible(s), création poursuivie.`
+            detail: `${(result.cards?.length || 0).toLocaleString('fr-FR')} cartes récupérées • quelques titres restent indisponibles, création poursuivie.`
           });
         }
 
-        const merged = new Map();
-
-        for (const card of [...(Array.isArray(result.cards) ? result.cards : []), ...(directCards || [])]) {
+        for (const card of Array.isArray(result.cards) ? result.cards : []) {
           if (card?.id && card?.title) merged.set(card.id, card);
         }
 
@@ -706,34 +727,19 @@ LIMIT ${MAX_SEMANTIC_TITLES}
             addCandidate(token);
           }
 
-          const phrases = [];
           for (const tokens of [titleTokens, categoryTokens]) {
             for (let index = 0; index < tokens.length - 1; index += 1) {
-              phrases.push(`${tokens[index]} ${tokens[index + 1]}`);
+              addCandidate(`${tokens[index]} ${tokens[index + 1]}`);
             }
           }
-
-          for (const phrase of phrases) addCandidate(phrase);
         }
 
-        // Supprime les termes qui ne couvrent pratiquement rien.
         for (const [keyword, ids] of [...coverage]) {
           if (!ids.size) coverage.delete(keyword);
         }
 
         const selected = [];
         const covered = new Set();
-        const normalizedFamilyKeyword = normalize(familyKeyword);
-
-        const addSelected = (keyword) => {
-          if (!keyword || selected.includes(keyword)) return;
-          selected.push(keyword);
-          for (const id of coverage.get(keyword) || []) covered.add(id);
-        };
-
-        if (coverage.has(normalizedFamilyKeyword)) {
-          addSelected(normalizedFamilyKeyword);
-        }
 
         while (
           selected.length < MAX_OWNERSHIP_KEYWORDS &&
@@ -748,25 +754,34 @@ LIMIT ${MAX_SEMANTIC_TITLES}
             for (const id of ids) {
               if (!covered.has(id)) gain += 1;
             }
-
             if (!gain) continue;
 
-            const score =
-              gain * 100 +
-              Math.min(ids.size, 30) +
-              Math.min(keyword.length, 24) / 100;
+            const words = keyword.split(' ').filter(Boolean).length;
+            const specificity =
+              (words >= 2 ? 1.28 : 1) *
+              (1 + Math.min(0.18, Math.max(0, keyword.length - 5) / 100));
 
-            if (!best || score > best.score) {
-              best = { keyword, gain, score, total: ids.size };
+            // On maximise la nouvelle couverture, avec un bonus aux expressions
+            // plus précises afin d'éviter les recherches trop larges.
+            const score = gain * specificity;
+
+            if (
+              !best ||
+              score > best.score ||
+              (score === best.score && keyword.length > best.keyword.length)
+            ) {
+              best = { keyword, gain, score };
             }
           }
 
           if (!best) break;
-          addSelected(best.keyword);
+          selected.push(best.keyword);
+          for (const id of coverage.get(best.keyword) || []) covered.add(id);
         }
 
         return {
           keywords: selected,
+          coverageByKeyword: coverage,
           coveredCards: covered.size,
           totalCards: familyIds.size,
           estimatedCoverage: familyIds.size
@@ -790,6 +805,7 @@ LIMIT ${MAX_SEMANTIC_TITLES}
       async function searchOwnedByKeyword(keyword, familyIds, report, keywordIndex, keywordTotal) {
         const found = new Map();
         let firstPageSize = 0;
+        let complete = false;
 
         for (let page = 0; page < MAX_OWNERSHIP_PAGES_PER_KEYWORD; page += 1) {
           const url = `/api/my-collection?sort=rarity&q=${encodeURIComponent(keyword)}&page=${page}&stats=0`;
@@ -825,17 +841,27 @@ LIMIT ${MAX_SEMANTIC_TITLES}
               ? json.searchHasMore
               : null;
 
-          if (!rows.length || hasMore === false) break;
-          if (hasMore == null && firstPageSize > 0 && rows.length < firstPageSize) break;
+          if (!rows.length || hasMore === false) {
+            complete = true;
+            break;
+          }
+
+          if (hasMore == null && firstPageSize > 0 && rows.length < firstPageSize) {
+            complete = true;
+            break;
+          }
 
           await wait(45);
         }
 
-        return [...found.values()].map((item) => ({
-          id: item.id,
-          count: Math.max(item.count, item.ownedCardIds.size || 1),
-          ownedCardIds: [...item.ownedCardIds]
-        }));
+        return {
+          cards: [...found.values()].map((item) => ({
+            id: item.id,
+            count: Math.max(item.count, item.ownedCardIds.size || 1),
+            ownedCardIds: [...item.ownedCardIds]
+          })),
+          complete
+        };
       }
 
       async function loadOwnedCardsForFamily(cards, familyKeyword, report) {
@@ -848,17 +874,19 @@ LIMIT ${MAX_SEMANTIC_TITLES}
           stage: 'ownership',
           percent: 84,
           title: 'Ta collection',
-          detail: `${keywords.length} mot(s)-clé(s) retenu(s) • couverture estimée ${Math.round(plan.estimatedCoverage * 100)} %`
+          detail: `${keywords.length} mot(s)-clé(s) retenu(s) • couverture visée ${Math.round(plan.estimatedCoverage * 100)} %`
         });
 
         const familyIds = new Set(cards.map((card) => card.id).filter(Boolean));
         const merged = new Map();
+        const verifiedIds = new Set();
+        const failedKeywords = [];
 
         for (let index = 0; index < keywords.length; index += 1) {
-          let results = [];
+          let result = null;
 
           try {
-            results = await searchOwnedByKeyword(
+            result = await searchOwnedByKeyword(
               keywords[index],
               familyIds,
               report,
@@ -867,6 +895,7 @@ LIMIT ${MAX_SEMANTIC_TITLES}
             );
           } catch (error) {
             console.debug('[WM Average] recherche possession ignorée après retries', keywords[index], error);
+            failedKeywords.push(keywords[index]);
             report({
               stage: 'ownership',
               percent: 84 + Math.round(((index + 1) / Math.max(1, keywords.length)) * 10),
@@ -876,7 +905,7 @@ LIMIT ${MAX_SEMANTIC_TITLES}
             continue;
           }
 
-          for (const item of results) {
+          for (const item of result.cards) {
             const previous = merged.get(item.id) || {
               id: item.id,
               count: 0,
@@ -889,13 +918,25 @@ LIMIT ${MAX_SEMANTIC_TITLES}
             }
             merged.set(item.id, previous);
           }
+
+          // Une carte non retournée ne peut être déclarée manquante que si la
+          // recherche correspondante a été parcourue jusqu'au bout.
+          if (result.complete) {
+            for (const id of plan.coverageByKeyword.get(keywords[index]) || []) {
+              verifiedIds.add(id);
+            }
+          }
         }
+
+        const verifiedCoverage = familyIds.size
+          ? verifiedIds.size / familyIds.size
+          : 0;
 
         report({
           stage: 'ownership',
           percent: 94,
           title: 'Ta collection',
-          detail: `${merged.size.toLocaleString('fr-FR')} carte(s) possédée(s) retrouvée(s) avec ${keywords.length} recherche(s)`
+          detail: `${merged.size.toLocaleString('fr-FR')} possédée(s) • ${Math.round(verifiedCoverage * 100)} % de la famille vérifiée`
         });
 
         return {
@@ -904,13 +945,17 @@ LIMIT ${MAX_SEMANTIC_TITLES}
             count: Math.max(item.count, item.ownedCardIds.size || 1),
             ownedCardIds: [...item.ownedCardIds]
           })),
+          verifiedIds: [...verifiedIds],
           keywords,
-          estimatedCoverage: plan.estimatedCoverage
+          failedKeywords,
+          estimatedCoverage: plan.estimatedCoverage,
+          verifiedCoverage
         };
       }
 
-      function applyOwnership(cards, ownedCards) {
+      function applyOwnership(cards, ownedCards, verifiedIds = []) {
         const owned = new Map();
+        const verified = new Set(verifiedIds);
 
         for (const card of ownedCards || []) {
           if (!card?.id) continue;
@@ -924,7 +969,11 @@ LIMIT ${MAX_SEMANTIC_TITLES}
 
         return cards.map((card) => ({
           ...card,
-          owned: owned.has(card.id),
+          owned: owned.has(card.id)
+            ? true
+            : verified.has(card.id)
+              ? false
+              : null,
           ownedCount: owned.get(card.id) || 0
         }));
       }
@@ -933,8 +982,6 @@ LIMIT ${MAX_SEMANTIC_TITLES}
         const cleanKeyword = String(keyword || '').trim();
         if (!cleanKeyword) throw new Error('Entre un thème.');
 
-        const titles = new Set();
-
         report({
           stage: 'start',
           percent: 4,
@@ -942,45 +989,63 @@ LIMIT ${MAX_SEMANTIC_TITLES}
           detail: `Préparation de « ${cleanKeyword} »…`
         });
 
-        let wikidata = null;
-        let wikipedia = null;
+        // Les trois sources sont indépendantes : on les lance ensemble pour
+        // éviter d'additionner leurs temps de réponse.
+        const wikidataTitles = new Set();
+        const wikipediaTitles = new Set();
+        const directTitles = new Set();
 
-        try {
-          wikidata = await discoverWikidata(cleanKeyword, titles, report);
-        } catch (error) {
-          console.debug('[WM Average] découverte Wikidata ignorée', error);
-          report({
-            stage: 'wikidata',
-            percent: 25,
-            title: 'Wikidata',
-            detail: 'Source indisponible, poursuite avec Wikipédia.'
-          });
+        const [wikidataResult, wikipediaResult, directResult] = await Promise.allSettled([
+          discoverWikidata(cleanKeyword, wikidataTitles, report),
+          discoverWikipediaCategories(cleanKeyword, wikipediaTitles, report),
+          discoverDirectWikiMasters(cleanKeyword, directTitles, report)
+        ]);
+
+        const wikidata = wikidataResult.status === 'fulfilled'
+          ? wikidataResult.value
+          : null;
+        const wikipedia = wikipediaResult.status === 'fulfilled'
+          ? wikipediaResult.value
+          : null;
+        const directCards = directResult.status === 'fulfilled'
+          ? directResult.value
+          : [];
+
+        if (wikidataResult.status === 'rejected') {
+          console.debug('[WM Average] découverte Wikidata ignorée', wikidataResult.reason);
+        }
+        if (wikipediaResult.status === 'rejected') {
+          console.debug('[WM Average] catégories Wikipédia ignorées', wikipediaResult.reason);
+        }
+        if (directResult.status === 'rejected') {
+          console.debug('[WM Average] recherche WikiMasters directe ignorée après retries', directResult.reason);
         }
 
-        try {
-          wikipedia = await discoverWikipediaCategories(cleanKeyword, titles, report);
-        } catch (error) {
-          console.debug('[WM Average] catégories Wikipédia ignorées', error);
-          report({
-            stage: 'wikipedia',
-            percent: 45,
-            title: 'Wikipédia',
-            detail: 'Catégories indisponibles, poursuite avec WikiMasters.'
-          });
-        }
+        const titles = new Set();
 
-        let directCards = [];
+        // Les résultats WikiMasters directs sont prioritaires. Ensuite on
+        // entrelace Wikipédia et Wikidata (2:1) pour qu'une source très large
+        // ne puisse pas monopoliser seule la limite des candidats.
+        for (const title of directTitles) addTitle(titles, title);
 
-        try {
-          directCards = await discoverDirectWikiMasters(cleanKeyword, titles, report);
-        } catch (error) {
-          console.debug('[WM Average] recherche WikiMasters directe ignorée après retries', error);
-          report({
-            stage: 'wikimasters-search',
-            percent: 50,
-            title: 'WikiMasters',
-            detail: 'Recherche directe momentanément indisponible après plusieurs essais. Poursuite avec les pages sémantiques.'
-          });
+        const wikipediaList = [...wikipediaTitles];
+        const wikidataList = [...wikidataTitles];
+        let wikipediaIndex = 0;
+        let wikidataIndex = 0;
+
+        while (
+          titles.size < MAX_SEMANTIC_TITLES &&
+          (wikipediaIndex < wikipediaList.length || wikidataIndex < wikidataList.length)
+        ) {
+          for (let step = 0; step < 2 && wikipediaIndex < wikipediaList.length; step += 1) {
+            addTitle(titles, wikipediaList[wikipediaIndex]);
+            wikipediaIndex += 1;
+          }
+
+          if (wikidataIndex < wikidataList.length) {
+            addTitle(titles, wikidataList[wikidataIndex]);
+            wikidataIndex += 1;
+          }
         }
 
         if (!titles.size) {
@@ -994,8 +1059,11 @@ LIMIT ${MAX_SEMANTIC_TITLES}
         }
 
         const ownership = await loadOwnedCardsForFamily(resolved, cleanKeyword, report);
-        const cards = applyOwnership(resolved, ownership.ownedCards)
-          .sort((a, b) => a.title.localeCompare(b.title, 'fr'));
+        const cards = applyOwnership(
+          resolved,
+          ownership.ownedCards,
+          ownership.verifiedIds
+        ).sort((a, b) => a.title.localeCompare(b.title, 'fr'));
 
         registerCards(cards.map((card) => ({
           id: card.id,
@@ -1023,14 +1091,17 @@ LIMIT ${MAX_SEMANTIC_TITLES}
           cards,
           createdAt: previous?.createdAt || now,
           updatedAt: now,
+          ownershipUpdatedAt: now,
           discovery: {
             candidateTitles: titles.size,
             matchedCards: cards.length,
             wikidataEntity: wikidata?.entity || null,
             wikipediaCategories: wikipedia?.roots || [],
-            semanticVersion: 2,
+            semanticVersion: 3,
             ownershipKeywords: ownership.keywords,
-            ownershipCoverage: ownership.estimatedCoverage
+            ownershipCoverage: ownership.estimatedCoverage,
+            ownershipVerifiedCoverage: ownership.verifiedCoverage,
+            ownershipFailedKeywords: ownership.failedKeywords
           }
         };
 
@@ -1038,7 +1109,7 @@ LIMIT ${MAX_SEMANTIC_TITLES}
           stage: 'done',
           percent: 100,
           title: 'Terminé',
-          detail: `${cards.length.toLocaleString('fr-FR')} cartes • ${cards.filter((card) => card.owned).length.toLocaleString('fr-FR')} possédées`
+          detail: `${cards.length.toLocaleString('fr-FR')} cartes • ${cards.filter((card) => card.owned === true).length.toLocaleString('fr-FR')} possédées`
         });
 
         return family;
@@ -1046,13 +1117,16 @@ LIMIT ${MAX_SEMANTIC_TITLES}
 
       function familyStats(family) {
         const cards = Array.isArray(family?.cards) ? family.cards : [];
-        const owned = cards.filter((card) => card.owned).length;
+        const owned = cards.filter((card) => card.owned === true).length;
+        const missing = cards.filter((card) => card.owned === false).length;
+        const unchecked = cards.filter((card) => card.owned == null).length;
         const total = cards.length;
 
         return {
           total,
           owned,
-          missing: Math.max(0, total - owned),
+          missing,
+          unchecked,
           percent: total ? Math.round((owned / total) * 100) : 0
         };
       }
@@ -1090,7 +1164,9 @@ LIMIT ${MAX_SEMANTIC_TITLES}
 
         const numbers = document.createElement('span');
         numbers.className = 'wm-family-card-numbers';
-        numbers.textContent = `${stats.owned.toLocaleString('fr-FR')} / ${stats.total.toLocaleString('fr-FR')} possédées`;
+        numbers.textContent = stats.unchecked
+          ? `${stats.owned.toLocaleString('fr-FR')} / ${stats.total.toLocaleString('fr-FR')} possédées • ${stats.unchecked.toLocaleString('fr-FR')} à vérifier`
+          : `${stats.owned.toLocaleString('fr-FR')} / ${stats.total.toLocaleString('fr-FR')} possédées`;
 
         const progress = document.createElement('span');
         progress.className = 'wm-family-progress';
@@ -1175,15 +1251,16 @@ LIMIT ${MAX_SEMANTIC_TITLES}
       function filteredCards(family) {
         let cards = [...family.cards];
 
-        if (currentFilter === 'owned') cards = cards.filter((card) => card.owned);
-        if (currentFilter === 'missing') cards = cards.filter((card) => !card.owned);
+        if (currentFilter === 'owned') cards = cards.filter((card) => card.owned === true);
+        if (currentFilter === 'missing') cards = cards.filter((card) => card.owned === false);
+        if (currentFilter === 'unchecked') cards = cards.filter((card) => card.owned == null);
 
         return cards.sort((a, b) => a.title.localeCompare(b.title, 'fr'));
       }
 
       function createRealCard(card) {
         const element = runtime.cardExtras.createCardElement(card, {
-          owned: Boolean(card.owned),
+          owned: card.owned,
           ownedCount: card.ownedCount || 0
         });
 
@@ -1195,9 +1272,12 @@ LIMIT ${MAX_SEMANTIC_TITLES}
         return slot;
       }
 
-      function renderDetailGrid(family, container) {
+      function renderDetailGrid(family, container, options = {}) {
         const cards = filteredCards(family);
-        const shown = cards.slice(0, visibleCount);
+        const grid = container.querySelector('[data-role="cards"]');
+        const count = container.querySelector('[data-role="count"]');
+        const more = container.querySelector('[data-role="more"]');
+        if (!grid || !count || !more) return;
 
         registerCards((family.cards || []).map((card) => ({
           id: card.id,
@@ -1208,24 +1288,27 @@ LIMIT ${MAX_SEMANTIC_TITLES}
           count: Math.max(1, card.ownedCount || 1)
         })));
 
-        const grid = container.querySelector('[data-role="cards"]');
-        const count = container.querySelector('[data-role="count"]');
-        const more = container.querySelector('[data-role="more"]');
+        const append = Boolean(options.append);
+        const previousVisible = append
+          ? Math.min(Number(grid.dataset.visibleCount) || 0, cards.length)
+          : 0;
+        const nextVisible = Math.min(visibleCount, cards.length);
 
-        grid.replaceChildren();
+        if (!append) grid.replaceChildren();
+
         const fragment = document.createDocumentFragment();
-
-        for (const card of shown) {
+        for (const card of cards.slice(previousVisible, nextVisible)) {
           const element = createRealCard(card);
           if (element) fragment.append(element);
         }
 
         grid.append(fragment);
+        grid.dataset.visibleCount = String(nextVisible);
         count.textContent = `${cards.length.toLocaleString('fr-FR')} carte${cards.length > 1 ? 's' : ''}`;
 
-        if (shown.length < cards.length) {
+        if (nextVisible < cards.length) {
           more.hidden = false;
-          more.textContent = `Afficher ${Math.min(CARD_BATCH, cards.length - shown.length)} de plus`;
+          more.textContent = `Afficher ${Math.min(CARD_BATCH, cards.length - nextVisible)} de plus`;
         } else {
           more.hidden = true;
         }
@@ -1235,8 +1318,75 @@ LIMIT ${MAX_SEMANTIC_TITLES}
         });
       }
 
+      async function syncFamilyOwnership(family) {
+        const progress = openProgressModal(`Synchronisation de « ${family.name} »`);
+
+        const report = (state) => {
+          const sourcePercent = Number(state?.percent) || 84;
+          const mappedPercent = 8 + Math.max(0, Math.min(86, (sourcePercent - 84) * 8.6));
+          progress.update({
+            ...state,
+            percent: mappedPercent,
+            title: state?.title || 'Ta collection'
+          });
+        };
+
+        try {
+          report({
+            percent: 84,
+            title: 'Ta collection',
+            detail: 'Choix des recherches les plus couvrantes…'
+          });
+
+          const ownership = await loadOwnedCardsForFamily(
+            family.cards || [],
+            family.keyword,
+            report
+          );
+
+          progress.update({
+            percent: 96,
+            title: 'Enregistrement',
+            detail: 'Mise à jour des statuts possédée / manquante…'
+          });
+
+          const cards = applyOwnership(
+            family.cards || [],
+            ownership.ownedCards,
+            ownership.verifiedIds
+          ).sort((a, b) => a.title.localeCompare(b.title, 'fr'));
+
+          const updated = {
+            ...family,
+            cards,
+            ownershipUpdatedAt: Date.now(),
+            discovery: {
+              ...(family.discovery || {}),
+              semanticVersion: Math.max(3, Number(family.discovery?.semanticVersion) || 0),
+              ownershipKeywords: ownership.keywords,
+              ownershipCoverage: ownership.estimatedCoverage,
+              ownershipVerifiedCoverage: ownership.verifiedCoverage,
+              ownershipFailedKeywords: ownership.failedKeywords
+            }
+          };
+
+          saveFamily(updated);
+          progress.update({
+            percent: 100,
+            title: 'Terminé',
+            detail: `${cards.filter((card) => card.owned === true).length.toLocaleString('fr-FR')} carte(s) possédée(s) retrouvée(s).`
+          });
+
+          await wait(350);
+          progress.close();
+          renderPageContent();
+        } catch (error) {
+          progress.fail(String(error?.message || error));
+        }
+      }
+
       async function rebuildFamily(family) {
-        const progress = openProgressModal(`Actualisation de « ${family.name} »`);
+        const progress = openProgressModal(`Reconstruction de « ${family.name} »`);
 
         try {
           const updated = await buildFamily({
@@ -1274,11 +1424,19 @@ LIMIT ${MAX_SEMANTIC_TITLES}
         const actions = document.createElement('div');
         actions.className = 'wm-family-actions';
 
-        const refresh = document.createElement('button');
-        refresh.type = 'button';
-        refresh.className = 'wm-family-secondary';
-        refresh.textContent = 'Actualiser';
-        refresh.addEventListener('click', () => rebuildFamily(family));
+        const sync = document.createElement('button');
+        sync.type = 'button';
+        sync.className = 'wm-family-secondary';
+        sync.textContent = 'Synchroniser';
+        sync.title = 'Met uniquement à jour les cartes que tu possèdes';
+        sync.addEventListener('click', () => syncFamilyOwnership(family));
+
+        const rebuild = document.createElement('button');
+        rebuild.type = 'button';
+        rebuild.className = 'wm-family-secondary';
+        rebuild.textContent = 'Reconstruire';
+        rebuild.title = 'Relance Wikidata, Wikipédia et la résolution des cartes WikiMasters';
+        rebuild.addEventListener('click', () => rebuildFamily(family));
 
         const remove = document.createElement('button');
         remove.type = 'button';
@@ -1291,7 +1449,7 @@ LIMIT ${MAX_SEMANTIC_TITLES}
           renderPageContent();
         });
 
-        actions.append(refresh, remove);
+        actions.append(sync, rebuild, remove);
         top.append(back, actions);
 
         const heading = document.createElement('div');
@@ -1303,9 +1461,15 @@ LIMIT ${MAX_SEMANTIC_TITLES}
 
         const discovery = family.discovery;
         const info = document.createElement('p');
+        const familyDate = formatDate(family.updatedAt);
+        const ownershipDate = formatDate(family.ownershipUpdatedAt || family.updatedAt);
+        const verifiedCoverage = Number(discovery?.ownershipVerifiedCoverage);
+        const verifiedCopy = Number.isFinite(verifiedCoverage)
+          ? ` • ${Math.round(verifiedCoverage * 100)} % vérifié`
+          : '';
         info.textContent = discovery?.candidateTitles
-          ? `${discovery.candidateTitles.toLocaleString('fr-FR')} pages liées → ${stats.total.toLocaleString('fr-FR')} cartes WikiMasters • actualisée le ${formatDate(family.updatedAt)}`
-          : `Thème : “${family.keyword}” • actualisée le ${formatDate(family.updatedAt)}`;
+          ? `${discovery.candidateTitles.toLocaleString('fr-FR')} pages liées → ${stats.total.toLocaleString('fr-FR')} cartes WikiMasters • famille ${familyDate} • possessions ${ownershipDate}${verifiedCopy}`
+          : `Thème : “${family.keyword}” • possessions ${ownershipDate}${verifiedCopy}`;
 
         copy.append(title, info);
 
@@ -1326,6 +1490,7 @@ LIMIT ${MAX_SEMANTIC_TITLES}
           <button type="button" data-filter="all">Toutes <strong>${stats.total.toLocaleString('fr-FR')}</strong></button>
           <button type="button" data-filter="owned">Possédées <strong>${stats.owned.toLocaleString('fr-FR')}</strong></button>
           <button type="button" data-filter="missing">Manquantes <strong>${stats.missing.toLocaleString('fr-FR')}</strong></button>
+          ${stats.unchecked ? `<button type="button" data-filter="unchecked">À vérifier <strong>${stats.unchecked.toLocaleString('fr-FR')}</strong></button>` : ''}
         `;
 
         filters.querySelectorAll('[data-filter]').forEach((button) => {
@@ -1354,7 +1519,7 @@ LIMIT ${MAX_SEMANTIC_TITLES}
         more.dataset.role = 'more';
         more.addEventListener('click', () => {
           visibleCount += CARD_BATCH;
-          renderDetailGrid(family, wrap);
+          renderDetailGrid(family, wrap, { append: true });
         });
 
         wrap.append(top, heading, progress, filters, toolbar, grid, more);
@@ -1459,14 +1624,18 @@ LIMIT ${MAX_SEMANTIC_TITLES}
 
         const close = () => overlay.remove();
         closeButton.addEventListener('click', close);
+        let highestPercent = 0;
 
         return {
           update(progress) {
-            const value = Math.max(0, Math.min(100, Number(progress?.percent) || 0));
-            stage.textContent = progress?.title || 'Création';
-            detail.textContent = progress?.detail || '';
-            fill.style.width = `${value}%`;
-            percent.textContent = `${value}%`;
+            const requested = Math.max(0, Math.min(100, Number(progress?.percent) || 0));
+            if (requested >= highestPercent) {
+              stage.textContent = progress?.title || 'Création';
+              detail.textContent = progress?.detail || '';
+            }
+            highestPercent = Math.max(highestPercent, requested);
+            fill.style.width = `${highestPercent}%`;
+            percent.textContent = `${Math.round(highestPercent)}%`;
           },
           fail(message) {
             stage.textContent = 'Erreur';
