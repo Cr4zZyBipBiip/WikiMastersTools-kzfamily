@@ -17,9 +17,7 @@
       const MAX_OWNERSHIP_KEYWORDS = 8;
       const MAX_OWNERSHIP_PAGES_PER_KEYWORD = 10;
       const OWNERSHIP_COVERAGE_TARGET = 0.95;
-      const MAX_MARKET_KEYWORDS = 6;
-      const MAX_MARKET_FALLBACKS = 6;
-      const MAX_MARKET_PAGES_PER_QUERY = 3;
+      const MAX_MARKET_PAGES_PER_CARD = 3;
       const MARKET_PAGE_SIZE = 50;
 
       let activeFamilyId = null;
@@ -33,11 +31,10 @@
       function createEmptyMarketState(familyId = null) {
         return {
           familyId,
-          loading: false,
-          error: '',
-          listings: [],
-          progress: '',
-          searchedAt: 0
+          cards: {},
+          batchLoading: false,
+          batchProgress: '',
+          batchError: ''
         };
       }
 
@@ -638,25 +635,22 @@
         return { keywords: selected, coverageByKeyword: coverage };
       }
 
-      function buildMarketplaceKeywords(family, missingCards) {
-        const plan = buildOwnershipKeywords(missingCards);
-        const keywords = [];
-        const seen = new Set();
+      function createMarketplaceIcon() {
+        const span = document.createElement('span');
+        span.className = 'wm-family-market-icon';
+        span.innerHTML = `
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="m14 13-8.381 8.38a1 1 0 0 1-3.001-3l8.384-8.381"></path>
+            <path d="m16 16 6-6"></path>
+            <path d="m21.5 10.5-8-8"></path>
+            <path d="m8 8 6-6"></path>
+            <path d="m8.5 7.5 8 8"></path>
+          </svg>`;
+        return span;
+      }
 
-        const add = (value) => {
-          const clean = normalize(value);
-          if (clean.length < SEARCH_MIN_LENGTH || seen.has(clean)) return;
-          seen.add(clean);
-          keywords.push(value);
-        };
-
-        add(family?.name);
-        for (const keyword of plan.keywords) {
-          if (keywords.length >= MAX_MARKET_KEYWORDS) break;
-          add(keyword);
-        }
-
-        return keywords.slice(0, MAX_MARKET_KEYWORDS);
+      function setMarketplaceButtonContent(button, label) {
+        button.replaceChildren(createMarketplaceIcon(), document.createTextNode(label));
       }
 
       function marketplacePrice(auction) {
@@ -689,13 +683,40 @@
         }
       }
 
-      async function searchMarketplaceQuery(query, missingIds, onProgress) {
-        const found = [];
+      function marketCardState(cardId) {
+        return marketState.cards?.[cardId] || {
+          loading: false,
+          error: '',
+          listings: [],
+          searchedAt: 0
+        };
+      }
 
-        for (let page = 1; page <= MAX_MARKET_PAGES_PER_QUERY; page += 1) {
+      function setMarketCardState(familyIdValue, cardId, next) {
+        const currentCards = marketState.familyId === familyIdValue
+          ? (marketState.cards || {})
+          : {};
+
+        marketState = {
+          ...(marketState.familyId === familyIdValue ? marketState : createEmptyMarketState(familyIdValue)),
+          familyId: familyIdValue,
+          cards: {
+            ...currentCards,
+            [cardId]: {
+              ...marketCardState(cardId),
+              ...next
+            }
+          }
+        };
+      }
+
+      async function searchMarketplaceQuery(query, missingIds) {
+        const listingsById = new Map();
+
+        for (let page = 1; page <= MAX_MARKET_PAGES_PER_CARD; page += 1) {
           const json = await fetchJson(
             `/api/marketplace?page=${page}&limit=${MARKET_PAGE_SIZE}&sort=recent&q=${encodeURIComponent(query)}`,
-            { credentials: 'omit' }
+            { credentials: 'include' }
           );
 
           const auctions = Array.isArray(json?.auctions) ? json.auctions : [];
@@ -711,104 +732,155 @@
               continue;
             }
 
-            found.push(auction);
+            listingsById.set(auction.id, auction);
           }
-
-          onProgress?.(page);
 
           if (json?.hasMore === false || auctions.length < MARKET_PAGE_SIZE) break;
           await wait(45);
         }
 
-        return found;
+        return [...listingsById.values()];
       }
 
-      async function loadMissingMarketplace(family) {
+      async function searchAllMissingMarketplace(family) {
         const missingCards = (family?.cards || []).filter((card) => card.owned === false);
-        const missingIds = new Set(missingCards.map((card) => card.id).filter(Boolean));
+        if (!missingCards.length) return;
 
-        if (!missingCards.length) {
+        const plan = buildOwnershipKeywords(missingCards);
+        const keywords = plan.keywords;
+
+        if (!keywords.length) {
           marketState = {
-            ...createEmptyMarketState(family?.id),
-            searchedAt: Date.now()
+            ...(marketState.familyId === family.id ? marketState : createEmptyMarketState(family.id)),
+            familyId: family.id,
+            batchLoading: false,
+            batchProgress: '',
+            batchError: 'Impossible de trouver des mots-clés utiles pour cette famille.'
           };
           renderPageContent();
           return;
         }
 
-        const broadQueries = buildMarketplaceKeywords(family, missingCards);
-        const listingsById = new Map();
-        const foundCardIds = new Set();
+        const missingIds = new Set(missingCards.map((card) => card.id).filter(Boolean));
+        const listingsByCard = new Map();
+        const searchedCardIds = new Set();
+        const failedKeywords = [];
+
+        // Conserve les résultats d'une éventuelle recherche exacte déjà faite.
+        for (const card of missingCards) {
+          const previous = marketCardState(card.id);
+          if (!Array.isArray(previous.listings) || !previous.listings.length) continue;
+
+          const map = new Map();
+          for (const auction of previous.listings) {
+            if (auction?.id) map.set(auction.id, auction);
+          }
+          if (map.size) listingsByCard.set(card.id, map);
+        }
 
         marketState = {
-          ...createEmptyMarketState(family.id),
-          loading: true,
-          progress: broadQueries.length
-            ? `Recherche 1/${broadQueries.length}…`
-            : 'Recherche des annonces…'
+          ...(marketState.familyId === family.id ? marketState : createEmptyMarketState(family.id)),
+          familyId: family.id,
+          batchLoading: true,
+          batchProgress: `Recherche 0/${keywords.length}…`,
+          batchError: ''
         };
         renderPageContent();
 
-        try {
-          let completed = 0;
+        for (let index = 0; index < keywords.length; index += 1) {
+          const keyword = keywords[index];
 
-          const runQuery = async (query, totalLabel) => {
-            const listings = await searchMarketplaceQuery(
-              query,
-              missingIds,
-              () => {}
-            );
+          try {
+            const listings = await searchMarketplaceQuery(keyword, missingIds);
 
             for (const auction of listings) {
-              listingsById.set(auction.id, auction);
               const cardId = auction?.card_id || auction?.card?.id;
-              if (cardId) foundCardIds.add(cardId);
+              if (!cardId) continue;
+
+              const current = listingsByCard.get(cardId) || new Map();
+              current.set(auction.id, auction);
+              listingsByCard.set(cardId, current);
             }
 
-            completed += 1;
-            marketState = {
-              ...marketState,
-              loading: true,
-              listings: [...listingsById.values()],
-              progress: `Recherche ${completed}/${totalLabel} • ${listingsById.size} annonce${listingsById.size > 1 ? 's' : ''}`
-            };
-            if (marketFamilyId === family.id) renderPageContent();
-          };
-
-          const initialTotal = broadQueries.length;
-          for (const query of broadQueries) {
-            await runQuery(query, initialTotal);
-          }
-
-          const remaining = missingCards.filter((card) => !foundCardIds.has(card.id));
-          const fallbackQueries = remaining
-            .slice(0, MAX_MARKET_FALLBACKS)
-            .map((card) => card.title)
-            .filter(Boolean);
-
-          if (fallbackQueries.length) {
-            const total = completed + fallbackQueries.length;
-            for (const query of fallbackQueries) {
-              await runQuery(query, total);
+            // Comme pour « Charger mes cartes », seules les cartes réellement
+            // couvertes par une recherche réussie sont considérées comme vérifiées.
+            for (const cardId of plan.coverageByKeyword.get(keyword) || []) {
+              searchedCardIds.add(cardId);
             }
+          } catch (error) {
+            failedKeywords.push(keyword);
           }
 
-          marketState = {
-            familyId: family.id,
-            loading: false,
-            error: '',
-            listings: [...listingsById.values()],
-            progress: '',
-            searchedAt: Date.now()
-          };
-        } catch (error) {
+          const listingCount = [...listingsByCard.values()]
+            .reduce((sum, map) => sum + map.size, 0);
+
           marketState = {
             ...marketState,
-            familyId: family.id,
+            batchLoading: true,
+            batchProgress: `Recherche ${index + 1}/${keywords.length} • ${listingCount} annonce${listingCount > 1 ? 's' : ''}`,
+            batchError: ''
+          };
+
+          if (marketFamilyId === family.id) renderPageContent();
+        }
+
+        const now = Date.now();
+        const nextCards = { ...(marketState.cards || {}) };
+
+        for (const card of missingCards) {
+          if (!searchedCardIds.has(card.id)) continue;
+
+          const found = listingsByCard.get(card.id);
+          nextCards[card.id] = {
+            loading: false,
+            error: '',
+            listings: found ? [...found.values()] : [],
+            searchedAt: now
+          };
+        }
+
+        marketState = {
+          familyId: family.id,
+          cards: nextCards,
+          batchLoading: false,
+          batchProgress: '',
+          batchError: failedKeywords.length
+            ? `${failedKeywords.length} recherche${failedKeywords.length > 1 ? 's' : ''} n’ont pas pu être terminées.`
+            : ''
+        };
+
+        if (marketFamilyId === family.id) renderPageContent();
+      }
+
+      async function searchMarketplaceCard(family, card) {
+        if (!family?.id || !card?.id || !card?.title) return;
+
+        setMarketCardState(family.id, card.id, {
+          loading: true,
+          error: '',
+          listings: []
+        });
+        renderPageContent();
+
+        try {
+          const listings = await searchMarketplaceQuery(
+            card.title,
+            new Set([card.id])
+          );
+
+          setMarketCardState(family.id, card.id, {
+            loading: false,
+            error: '',
+            listings,
+            searchedAt: Date.now()
+          });
+        } catch (error) {
+          setMarketCardState(family.id, card.id, {
             loading: false,
             error: String(error?.message || error),
+            listings: [],
             searchedAt: Date.now()
-          };
+          });
         }
 
         if (marketFamilyId === family.id) renderPageContent();
@@ -816,9 +888,12 @@
 
       function openMissingMarketplace(family) {
         marketFamilyId = family.id;
-        marketState = createEmptyMarketState(family.id);
+
+        if (marketState.familyId !== family.id) {
+          marketState = createEmptyMarketState(family.id);
+        }
+
         renderPageContent();
-        loadMissingMarketplace(family);
       }
 
       function mapOwnedEntry(entry) {
@@ -1303,64 +1378,58 @@
         title.textContent = 'Marché des cartes manquantes';
 
         const subtitle = document.createElement('p');
-        subtitle.textContent = 'Annonces trouvées uniquement pour les cartes marquées comme manquantes dans cette famille.';
+        subtitle.textContent = 'Cherche une carte par son nom exact, ou lance une recherche intelligente sur toutes les manquantes avec les mêmes mots-clés de couverture que « Charger mes cartes ».';
         copy.append(title, subtitle);
 
-        const refresh = document.createElement('button');
-        refresh.type = 'button';
-        refresh.className = 'wm-family-secondary';
-        refresh.textContent = marketState.loading ? 'Recherche…' : 'Actualiser';
-        refresh.disabled = marketState.loading;
-        refresh.addEventListener('click', () => loadMissingMarketplace(family));
+        const searchAll = document.createElement('button');
+        searchAll.type = 'button';
+        searchAll.className = 'wm-family-primary wm-family-market-all';
+        searchAll.textContent = marketState.batchLoading
+          ? 'Recherche en cours…'
+          : 'Rechercher toutes les manquantes';
+        searchAll.disabled = Boolean(marketState.batchLoading);
+        searchAll.addEventListener('click', () => searchAllMissingMarketplace(family));
 
-        header.append(copy, refresh);
+        header.append(copy, searchAll);
         panel.append(header);
 
-        const missingCards = (family.cards || []).filter((card) => card.owned === false);
-        const missingMap = new Map(missingCards.map((card) => [card.id, card]));
-        const listings = marketState.familyId === family.id
-          ? marketState.listings
-          : [];
+        const missingCards = (family.cards || [])
+          .filter((card) => card.owned === false)
+          .sort((a, b) => a.title.localeCompare(b.title, 'fr'));
 
-        const grouped = new Map();
-        for (const auction of listings) {
-          const cardId = auction?.card_id || auction?.card?.id;
-          if (!cardId || !missingMap.has(cardId)) continue;
-          const current = grouped.get(cardId) || [];
-          current.push(auction);
-          grouped.set(cardId, current);
-        }
-
-        const foundCardIds = [...grouped.keys()];
         const summary = document.createElement('div');
         summary.className = 'wm-family-market-summary';
 
-        if (marketState.loading) {
+        const searchedCount = missingCards.filter((card) => {
+          const state = marketCardState(card.id);
+          return state.loading || state.searchedAt;
+        }).length;
+
+        const availableCount = missingCards.filter((card) => {
+          const state = marketCardState(card.id);
+          return Array.isArray(state.listings) && state.listings.length > 0;
+        }).length;
+
+        if (marketState.batchLoading) {
           summary.dataset.mode = 'loading';
-          summary.textContent = marketState.progress || 'Recherche des annonces…';
-        } else if (marketState.error) {
+          summary.textContent = marketState.batchProgress || 'Recherche des cartes manquantes…';
+        } else if (marketState.batchError) {
           summary.dataset.mode = 'error';
-          summary.textContent = `Recherche incomplète : ${marketState.error}`;
+          summary.textContent = `Recherche globale interrompue : ${marketState.batchError}`;
         } else {
-          summary.textContent = `${foundCardIds.length.toLocaleString('fr-FR')} carte${foundCardIds.length > 1 ? 's' : ''} trouvée${foundCardIds.length > 1 ? 's' : ''} sur ${missingCards.length.toLocaleString('fr-FR')} manquante${missingCards.length > 1 ? 's' : ''} • ${listings.length.toLocaleString('fr-FR')} annonce${listings.length > 1 ? 's' : ''}`;
+          summary.textContent = searchedCount
+            ? `${searchedCount} / ${missingCards.length} recherchée${searchedCount > 1 ? 's' : ''} • ${availableCount} avec annonce${availableCount > 1 ? 's' : ''}`
+            : `${missingCards.length} carte${missingCards.length > 1 ? 's' : ''} manquante${missingCards.length > 1 ? 's' : ''} • aucune requête lancée pour le moment`;
         }
 
         panel.append(summary);
 
-        if (!marketState.loading && !marketState.error && !listings.length) {
-          const empty = document.createElement('div');
-          empty.className = 'wm-family-market-empty';
-          empty.innerHTML = '<strong>Aucune annonce trouvée.</strong><span>Il n’y a peut-être rien en vente pour les cartes manquantes actuellement.</span>';
-          panel.append(empty);
-          return panel;
-        }
-
         const groups = document.createElement('div');
         groups.className = 'wm-family-market-groups';
 
-        for (const cardId of foundCardIds) {
-          const card = missingMap.get(cardId);
-          const offers = [...(grouped.get(cardId) || [])].sort((a, b) => {
+        for (const card of missingCards) {
+          const state = marketCardState(card.id);
+          const offers = [...(state.listings || [])].sort((a, b) => {
             const priceA = marketplacePrice(a);
             const priceB = marketplacePrice(b);
 
@@ -1380,10 +1449,9 @@
           const thumb = document.createElement('div');
           thumb.className = 'wm-family-market-thumb';
 
-          const imageUrl = card?.imageUrl || offers[0]?.card?.image_url || null;
-          if (imageUrl) {
+          if (card.imageUrl) {
             const image = document.createElement('img');
-            image.src = imageUrl;
+            image.src = card.imageUrl;
             image.alt = '';
             image.loading = 'lazy';
             thumb.append(image);
@@ -1393,42 +1461,78 @@
 
           const cardCopy = document.createElement('div');
           const cardTitle = document.createElement('strong');
-          cardTitle.textContent = card?.title || offers[0]?.card?.wikipedia_title || 'Carte';
+          cardTitle.textContent = card.title;
 
           const cardMeta = document.createElement('span');
-          const rarity = card?.rarity || offers[0]?.card?.rarity || null;
-          cardMeta.textContent = [rarity, `${offers.length} annonce${offers.length > 1 ? 's' : ''}`]
+          const stateCopy = state.loading
+            ? 'Recherche en cours…'
+            : state.error
+              ? 'Erreur de recherche'
+              : state.searchedAt
+                ? offers.length
+                  ? `${offers.length} annonce${offers.length > 1 ? 's' : ''} trouvée${offers.length > 1 ? 's' : ''}`
+                  : 'Aucune annonce'
+                : 'Pas encore recherchée';
+
+          cardMeta.textContent = [card.rarity, stateCopy]
             .filter(Boolean)
             .join(' • ');
 
           cardCopy.append(cardTitle, cardMeta);
-          identity.append(thumb, cardCopy);
 
-          const offerList = document.createElement('div');
-          offerList.className = 'wm-family-market-offers';
+          const search = document.createElement('button');
+          search.type = 'button';
+          search.className = 'wm-family-secondary wm-family-market-search';
+          search.textContent = state.loading
+            ? 'Recherche…'
+            : state.searchedAt
+              ? 'Rechercher à nouveau'
+              : 'Chercher sur le marché';
+          search.disabled = state.loading || Boolean(marketState.batchLoading);
+          search.addEventListener('click', () => searchMarketplaceCard(family, card));
 
-          const visibleOffers = offers.slice(0, 4);
-          for (const offer of visibleOffers) {
-            offerList.append(createMarketplaceOffer(offer));
-          }
+          identity.append(thumb, cardCopy, search);
+          group.append(identity);
 
-          if (offers.length > visibleOffers.length) {
-            const details = document.createElement('details');
-            details.className = 'wm-family-market-more';
+          if (state.error) {
+            const error = document.createElement('div');
+            error.className = 'wm-family-market-card-status is-error';
+            error.textContent = `Impossible de vérifier cette carte : ${state.error}`;
+            group.append(error);
+          } else if (state.searchedAt && !state.loading && !offers.length) {
+            const none = document.createElement('div');
+            none.className = 'wm-family-market-card-status';
+            none.textContent = 'Aucune annonce active trouvée pour cette carte.';
+            group.append(none);
+          } else if (offers.length) {
+            const offerList = document.createElement('div');
+            offerList.className = 'wm-family-market-offers';
 
-            const summaryMore = document.createElement('summary');
-            summaryMore.textContent = `Voir ${offers.length - visibleOffers.length} autre${offers.length - visibleOffers.length > 1 ? 's' : ''} annonce${offers.length - visibleOffers.length > 1 ? 's' : ''}`;
-
-            const extra = document.createElement('div');
-            for (const offer of offers.slice(visibleOffers.length)) {
-              extra.append(createMarketplaceOffer(offer));
+            const visibleOffers = offers.slice(0, 4);
+            for (const offer of visibleOffers) {
+              offerList.append(createMarketplaceOffer(offer));
             }
 
-            details.append(summaryMore, extra);
-            offerList.append(details);
+            if (offers.length > visibleOffers.length) {
+              const details = document.createElement('details');
+              details.className = 'wm-family-market-more';
+
+              const summaryMore = document.createElement('summary');
+              const extraCount = offers.length - visibleOffers.length;
+              summaryMore.textContent = `Voir ${extraCount} autre${extraCount > 1 ? 's' : ''} annonce${extraCount > 1 ? 's' : ''}`;
+
+              const extra = document.createElement('div');
+              for (const offer of offers.slice(visibleOffers.length)) {
+                extra.append(createMarketplaceOffer(offer));
+              }
+
+              details.append(summaryMore, extra);
+              offerList.append(details);
+            }
+
+            group.append(offerList);
           }
 
-          group.append(identity, offerList);
           groups.append(group);
         }
 
@@ -1531,9 +1635,12 @@
             market.className = marketMode
               ? 'wm-family-primary wm-family-market-toggle'
               : 'wm-family-secondary wm-family-market-toggle';
-            market.textContent = marketMode
-              ? 'Retour aux cartes'
-              : `Marché des manquantes (${stats.missing})`;
+            setMarketplaceButtonContent(
+              market,
+              marketMode
+                ? 'Retour aux cartes'
+                : `Marché des manquantes (${stats.missing})`
+            );
             market.title = marketMode
               ? 'Quitter le mode Marché'
               : 'Chercher les cartes manquantes actuellement en vente';
