@@ -107,6 +107,221 @@
         }
       }
 
+      function wikipediaUrlForTitle(title) {
+        const slug = encodeURIComponent(String(title || '').trim().replace(/ /g, '_'));
+        return slug ? `https://fr.wikipedia.org/wiki/${slug}` : null;
+      }
+
+      function bytesToBase64Url(bytes) {
+        let binary = '';
+        const chunkSize = 0x8000;
+
+        for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+          const chunk = bytes.subarray(offset, Math.min(bytes.length, offset + chunkSize));
+          binary += String.fromCharCode(...chunk);
+        }
+
+        return btoa(binary)
+          .replace(/\+/g, '-')
+          .replace(/\//g, '_')
+          .replace(/=+$/g, '');
+      }
+
+      function base64UrlToBytes(value) {
+        const normalized = String(value || '')
+          .replace(/-/g, '+')
+          .replace(/_/g, '/');
+        const padding = '='.repeat((4 - (normalized.length % 4 || 4)) % 4);
+        const binary = atob(normalized + padding);
+        const bytes = new Uint8Array(binary.length);
+
+        for (let index = 0; index < binary.length; index += 1) {
+          bytes[index] = binary.charCodeAt(index);
+        }
+
+        return bytes;
+      }
+
+      async function compressBytes(bytes) {
+        if (typeof CompressionStream !== 'function') return null;
+
+        const stream = new Blob([bytes])
+          .stream()
+          .pipeThrough(new CompressionStream('gzip'));
+
+        return new Uint8Array(await new Response(stream).arrayBuffer());
+      }
+
+      async function decompressBytes(bytes) {
+        if (typeof DecompressionStream !== 'function') {
+          throw new Error('La décompression gzip n’est pas disponible dans ce navigateur.');
+        }
+
+        const stream = new Blob([bytes])
+          .stream()
+          .pipeThrough(new DecompressionStream('gzip'));
+
+        return new Uint8Array(await new Response(stream).arrayBuffer());
+      }
+
+      function compactFamilyPayload(family) {
+        const cards = Array.isArray(family?.cards) ? family.cards : [];
+        const coverIndex = family?.coverCardId
+          ? cards.findIndex((card) => card.id === family.coverCardId)
+          : -1;
+
+        return [
+          String(family?.name || '').trim(),
+          coverIndex,
+          cards.map((card) => [
+            String(card?.id || ''),
+            String(card?.title || ''),
+            card?.rarity || '',
+            card?.category || '',
+            card?.imageUrl || '',
+            Number.isFinite(Number(card?.atk)) ? Number(card.atk) : '',
+            Number.isFinite(Number(card?.def)) ? Number(card.def) : ''
+          ])
+        ];
+      }
+
+      async function encodeFamilyCode(family) {
+        const json = JSON.stringify(compactFamilyPayload(family));
+        const rawBytes = new TextEncoder().encode(json);
+        const rawCode = `F0.${bytesToBase64Url(rawBytes)}`;
+
+        try {
+          const compressed = await compressBytes(rawBytes);
+          if (compressed) {
+            const compressedCode = `F1.${bytesToBase64Url(compressed)}`;
+            if (compressedCode.length < rawCode.length) return compressedCode;
+          }
+        } catch (_) {}
+
+        return rawCode;
+      }
+
+      async function decodeFamilyCode(rawCode) {
+        const code = String(rawCode || '').replace(/\s+/g, '').trim();
+        if (!code) throw new Error('Colle un code de famille.');
+
+        const separator = code.indexOf('.');
+        if (separator <= 0) throw new Error('Code de famille invalide.');
+
+        const version = code.slice(0, separator);
+        const encoded = code.slice(separator + 1);
+        if (!encoded) throw new Error('Code de famille invalide.');
+
+        let bytes = base64UrlToBytes(encoded);
+
+        if (version === 'F1') {
+          bytes = await decompressBytes(bytes);
+        } else if (version !== 'F0') {
+          throw new Error('Version de famille non prise en charge.');
+        }
+
+        let payload;
+        try {
+          payload = JSON.parse(new TextDecoder().decode(bytes));
+        } catch (_) {
+          throw new Error('Le code de famille est corrompu.');
+        }
+
+        if (!Array.isArray(payload) || payload.length < 3) {
+          throw new Error('Format de famille invalide.');
+        }
+
+        const name = String(payload[0] || '').trim();
+        const coverIndex = Number(payload[1]);
+        const rows = Array.isArray(payload[2]) ? payload[2] : [];
+
+        if (!name || name.length > 120) {
+          throw new Error('Nom de famille invalide.');
+        }
+        if (rows.length > 5000) {
+          throw new Error('Cette famille contient trop de cartes.');
+        }
+
+        const cards = [];
+        const seen = new Set();
+
+        for (const row of rows) {
+          if (!Array.isArray(row) || row.length < 2) continue;
+
+          const id = String(row[0] || '').trim();
+          const title = String(row[1] || '').trim();
+          if (!id || !title || seen.has(id)) continue;
+          seen.add(id);
+
+          const rarity = ['L', 'UR', 'SR', 'R', 'PC', 'C'].includes(row[2])
+            ? row[2]
+            : 'C';
+          const atk = row[5] === '' || row[5] == null ? null : Number(row[5]);
+          const def = row[6] === '' || row[6] == null ? null : Number(row[6]);
+
+          cards.push({
+            id,
+            title,
+            rarity,
+            category: String(row[3] || '').trim() || null,
+            imageUrl: String(row[4] || '').trim() || null,
+            wikipediaUrl: wikipediaUrlForTitle(title),
+            atk: atk != null && Number.isFinite(atk) ? atk : null,
+            def: def != null && Number.isFinite(def) ? def : null,
+            owned: null,
+            ownedCount: 0
+          });
+        }
+
+        const importedCoverId =
+          Number.isInteger(coverIndex) &&
+          coverIndex >= 0 &&
+          coverIndex < rows.length
+            ? String(rows[coverIndex]?.[0] || '')
+            : null;
+
+        const now = Date.now();
+        return {
+          id: familyId(),
+          name,
+          cards: cards.sort((a, b) => a.title.localeCompare(b.title, 'fr')),
+          coverCardId: importedCoverId && seen.has(importedCoverId)
+            ? importedCoverId
+            : null,
+          createdAt: now,
+          updatedAt: now,
+          ownershipUpdatedAt: null,
+          mode: 'manual'
+        };
+      }
+
+      async function copyText(value) {
+        const text = String(value || '');
+
+        try {
+          if (navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(text);
+            return true;
+          }
+        } catch (_) {}
+
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.setAttribute('readonly', '');
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.append(textarea);
+        textarea.select();
+
+        let copied = false;
+        try {
+          copied = document.execCommand('copy');
+        } catch (_) {}
+
+        textarea.remove();
+        return copied;
+      }
+
       function ensureNavLink() {
         if (!runtime.settings.isEnabled('themeTracker')) {
           document.getElementById(NAV_ID)?.remove();
@@ -645,7 +860,7 @@
         const button = document.createElement('button');
         button.type = 'button';
         button.className = 'wm-family-add-card';
-        button.innerHTML = '<span>+</span><strong>Ajouter une famille</strong>';
+        button.innerHTML = '<span>+</span><strong>Créer une famille</strong>';
         button.addEventListener('click', openCreateModal);
         return button;
       }
@@ -669,10 +884,20 @@
         const add = document.createElement('button');
         add.type = 'button';
         add.className = 'wm-family-primary';
-        add.textContent = '+ Ajouter une famille';
+        add.textContent = 'Créer une famille';
         add.addEventListener('click', openCreateModal);
 
-        heading.append(copy, add);
+        const homeActions = document.createElement('div');
+        homeActions.className = 'wm-family-home-actions';
+
+        const importButton = document.createElement('button');
+        importButton.type = 'button';
+        importButton.className = 'wm-family-secondary';
+        importButton.textContent = 'Importer une famille';
+        importButton.addEventListener('click', openImportModal);
+
+        homeActions.append(add, importButton);
+        heading.append(copy, homeActions);
 
         const grid = document.createElement('div');
         grid.className = 'wm-family-grid';
@@ -687,10 +912,20 @@
           const emptyButton = document.createElement('button');
           emptyButton.type = 'button';
           emptyButton.className = 'wm-family-primary';
-          emptyButton.textContent = 'Ajouter une famille';
+          emptyButton.textContent = 'Créer une famille';
           emptyButton.addEventListener('click', openCreateModal);
 
-          empty.append(emptyButton);
+          const importEmptyButton = document.createElement('button');
+          importEmptyButton.type = 'button';
+          importEmptyButton.className = 'wm-family-secondary';
+          importEmptyButton.textContent = 'Importer une famille';
+          importEmptyButton.addEventListener('click', openImportModal);
+
+          const emptyActions = document.createElement('div');
+          emptyActions.className = 'wm-family-empty-actions';
+          emptyActions.append(emptyButton, importEmptyButton);
+
+          empty.append(emptyActions);
           grid.append(empty);
         } else {
           families.forEach((family) => grid.append(createFamilyCard(family)));
@@ -862,6 +1097,12 @@
           complete.disabled = family.cards.length === 0;
           complete.addEventListener('click', () => syncOwnedFamily(family.id));
 
+          const exportButton = document.createElement('button');
+          exportButton.type = 'button';
+          exportButton.className = 'wm-family-secondary';
+          exportButton.textContent = 'Exporter';
+          exportButton.addEventListener('click', () => openExportModal(family.id));
+
           const edit = document.createElement('button');
           edit.type = 'button';
           edit.className = 'wm-family-primary';
@@ -871,7 +1112,7 @@
             renderPageContent();
           });
 
-          actions.append(complete, edit);
+          actions.append(complete, exportButton, edit);
         }
 
         top.append(back, actions);
@@ -1319,6 +1560,166 @@
         }
       }
 
+      async function openExportModal(familyIdValue) {
+        if (document.querySelector('.wm-family-modal-overlay')) return;
+
+        const family = getFamily(familyIdValue);
+        if (!family) return;
+
+        const overlay = document.createElement('div');
+        overlay.className = 'wm-family-modal-overlay';
+
+        const modal = document.createElement('div');
+        modal.className = 'wm-family-modal wm-family-share-modal';
+
+        const title = document.createElement('h2');
+        title.textContent = `Exporter « ${family.name} »`;
+
+        const description = document.createElement('p');
+        description.textContent = 'Partage ce code pour transmettre la famille. Les possessions personnelles ne sont pas incluses.';
+
+        const status = document.createElement('div');
+        status.className = 'wm-family-modal-status';
+        status.textContent = 'Génération du code…';
+
+        const textarea = document.createElement('textarea');
+        textarea.className = 'wm-family-code-area';
+        textarea.readOnly = true;
+        textarea.spellcheck = false;
+        textarea.placeholder = 'Génération…';
+
+        const meta = document.createElement('div');
+        meta.className = 'wm-family-share-meta';
+
+        const actions = document.createElement('div');
+        actions.className = 'wm-family-modal-actions';
+
+        const close = document.createElement('button');
+        close.type = 'button';
+        close.className = 'wm-family-secondary';
+        close.textContent = 'Fermer';
+
+        const copy = document.createElement('button');
+        copy.type = 'button';
+        copy.className = 'wm-family-primary';
+        copy.textContent = 'Copier';
+        copy.disabled = true;
+
+        close.addEventListener('click', () => overlay.remove());
+        overlay.addEventListener('click', (event) => {
+          if (event.target === overlay) overlay.remove();
+        });
+
+        copy.addEventListener('click', async () => {
+          if (!textarea.value) return;
+          const copied = await copyText(textarea.value);
+          status.dataset.mode = copied ? 'success' : 'error';
+          status.textContent = copied
+            ? 'Code copié.'
+            : 'Impossible de copier automatiquement. Sélectionne le code manuellement.';
+          if (!copied) {
+            textarea.focus();
+            textarea.select();
+          }
+        });
+
+        actions.append(close, copy);
+        modal.append(title, description, textarea, meta, status, actions);
+        overlay.append(modal);
+        document.body.append(overlay);
+
+        try {
+          const code = await encodeFamilyCode(family);
+          if (!overlay.isConnected) return;
+
+          textarea.value = code;
+          meta.textContent = `${family.cards.length.toLocaleString('fr-FR')} carte${family.cards.length > 1 ? 's' : ''} • ${code.length.toLocaleString('fr-FR')} caractères`;
+          status.textContent = code.startsWith('F1.')
+            ? 'Code compressé prêt à partager.'
+            : 'Code prêt à partager.';
+          copy.disabled = false;
+          textarea.focus();
+          textarea.select();
+        } catch (error) {
+          status.dataset.mode = 'error';
+          status.textContent = `Erreur : ${String(error?.message || error)}`;
+        }
+      }
+
+      function openImportModal() {
+        if (document.querySelector('.wm-family-modal-overlay')) return;
+
+        const overlay = document.createElement('div');
+        overlay.className = 'wm-family-modal-overlay';
+
+        const modal = document.createElement('div');
+        modal.className = 'wm-family-modal wm-family-share-modal';
+
+        const title = document.createElement('h2');
+        title.textContent = 'Importer une famille';
+
+        const description = document.createElement('p');
+        description.textContent = 'Colle le code reçu. La famille sera ajoutée comme une nouvelle famille.';
+
+        const textarea = document.createElement('textarea');
+        textarea.className = 'wm-family-code-area';
+        textarea.spellcheck = false;
+        textarea.placeholder = 'F1.H4sI…';
+
+        const status = document.createElement('div');
+        status.className = 'wm-family-modal-status';
+        status.textContent = 'Les possessions seront à vérifier sur ton propre compte.';
+
+        const actions = document.createElement('div');
+        actions.className = 'wm-family-modal-actions';
+
+        const cancel = document.createElement('button');
+        cancel.type = 'button';
+        cancel.className = 'wm-family-secondary';
+        cancel.textContent = 'Annuler';
+
+        const importButton = document.createElement('button');
+        importButton.type = 'button';
+        importButton.className = 'wm-family-primary';
+        importButton.textContent = 'Importer';
+
+        cancel.addEventListener('click', () => overlay.remove());
+        overlay.addEventListener('click', (event) => {
+          if (event.target === overlay) overlay.remove();
+        });
+
+        importButton.addEventListener('click', async () => {
+          importButton.disabled = true;
+          status.dataset.mode = '';
+          status.textContent = 'Lecture du code…';
+
+          try {
+            const family = await decodeFamilyCode(textarea.value);
+            saveFamily(family);
+            registerFamilyCards(family);
+
+            activeFamilyId = family.id;
+            editingFamilyId = null;
+            currentFilter = 'all';
+            visibleCount = CARD_BATCH;
+            searchState = createEmptySearchState(family.id);
+
+            overlay.remove();
+            renderPageContent();
+          } catch (error) {
+            status.dataset.mode = 'error';
+            status.textContent = String(error?.message || error);
+            importButton.disabled = false;
+          }
+        });
+
+        actions.append(cancel, importButton);
+        modal.append(title, description, textarea, status, actions);
+        overlay.append(modal);
+        document.body.append(overlay);
+        textarea.focus();
+      }
+
       function openCreateModal() {
         if (document.querySelector('.wm-family-modal-overlay')) return;
 
@@ -1329,7 +1730,7 @@
         modal.className = 'wm-family-modal';
 
         const title = document.createElement('h2');
-        title.textContent = 'Ajouter une famille';
+        title.textContent = 'Créer une famille';
 
         const description = document.createElement('p');
         description.textContent = 'Crée la famille vide, puis choisis manuellement ses cartes.';
