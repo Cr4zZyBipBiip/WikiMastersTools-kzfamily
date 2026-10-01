@@ -386,11 +386,11 @@
 }
 
 /* Sans ça, la liste déroulante native garde un fond clair avec le texte clair hérité. */
-.wm-modal select {
+.wm-ranking-filter-tag {
   color-scheme: dark;
 }
 
-.wm-modal select option {
+.wm-ranking-filter-tag option {
   background: #111512;
   color: #f8fafc;
   /* La liste native n'hérite pas de la police du site et retombe sur une serif. */

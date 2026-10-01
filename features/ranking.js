@@ -12,10 +12,24 @@
       const pendingBridgeRequests = new Map();
 
       // Requête au bridge résolue par l'événement de réponse portant le même requestId.
-      function requestBridge(eventName, detail = {}) {
+      function requestBridge(eventName, detail = {}, timeoutMs = 12000) {
         return new Promise((resolve) => {
           const requestId = `${eventName}:${Date.now()}:${Math.random().toString(36).slice(2)}`;
-          pendingBridgeRequests.set(requestId, resolve);
+
+          const timeout = setTimeout(() => {
+            const pending = pendingBridgeRequests.get(requestId);
+            if (!pending) return;
+
+            pendingBridgeRequests.delete(requestId);
+            resolve({
+              requestId,
+              ok: false,
+              timeout: true,
+              error: 'La requête a expiré.'
+            });
+          }, timeoutMs);
+
+          pendingBridgeRequests.set(requestId, { resolve, timeout });
           window.dispatchEvent(new CustomEvent(eventName, {
             detail: { ...detail, requestId }
           }));
@@ -24,11 +38,12 @@
 
       function resolveBridgeRequest(event) {
         const detail = event.detail || {};
-        const resolve = pendingBridgeRequests.get(detail.requestId);
-        if (!resolve) return;
+        const pending = pendingBridgeRequests.get(detail.requestId);
+        if (!pending) return;
 
+        clearTimeout(pending.timeout);
         pendingBridgeRequests.delete(detail.requestId);
-        resolve(detail);
+        pending.resolve(detail);
       }
 
       window.addEventListener('wm-average-tag-cards', resolveBridgeRequest);
