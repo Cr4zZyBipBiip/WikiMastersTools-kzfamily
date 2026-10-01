@@ -11,6 +11,33 @@
       let globalCardsRequestTemplate = null;
       let supabaseRequestTemplate = null;
 
+      // Étiquettes normalisées en { id, name, color }, dédoublonnées par id (ou par nom à défaut).
+      function mapTags(...lists) {
+        const byKey = new Map();
+
+        for (const list of lists) {
+          if (!Array.isArray(list)) continue;
+
+          for (const raw of list) {
+            const tag = raw?.tag && typeof raw.tag === 'object' ? raw.tag : raw;
+            const isObject = tag && typeof tag === 'object';
+            const name = String((isObject ? tag.name : tag) || '').trim();
+            if (!name) continue;
+
+            const id = isObject && tag.id ? String(tag.id) : null;
+            const color = isObject && typeof tag.color === 'string' ? tag.color : null;
+            const mapped = { id, name, color };
+            // Présent uniquement dans la liste des étiquettes du joueur.
+            if (isObject && Number.isFinite(Number(tag.cardCount))) {
+              mapped.cardCount = Number(tag.cardCount);
+            }
+            byKey.set(id || name, mapped);
+          }
+        }
+
+        return [...byKey.values()];
+      }
+
       function mapEntry(entry) {
         const card = entry && entry.card;
         const id = (entry && entry.card_id) || (card && card.id);
@@ -26,7 +53,9 @@
           rarity: card?.rarity || null,
           imageUrl: card?.image_url || null,
           wikipediaUrl: card?.wikipedia_url || null,
-          count: Number(entry?.count) || 1
+          count: Number(entry?.count) || 1,
+          starred: entry?.starred === true,
+          tags: mapTags(entry?.tags)
         };
       }
 
@@ -376,7 +405,7 @@
 
       return {
         originalFetch, MAX_COLLECTION_PAGES, MAX_BULK_PACKS, RARITY_ORDER,
-        MARKETPLACE_MINE_CACHE_TTL, mapEntry, extractCards, emitCollection,
+        MARKETPLACE_MINE_CACHE_TTL, mapTags, mapEntry, extractCards, emitCollection,
         isMarketplaceDetailApi, isPacksOpenApi, isTradesApi,
         isSupabaseRestApi, captureSupabaseRequest, getSupabaseRequestTemplate,
         isGlobalCardsApi, captureGlobalCardsRequest, getGlobalCardsRequestTemplate,

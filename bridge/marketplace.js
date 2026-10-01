@@ -14,6 +14,9 @@
         text: ''
       };
 
+      // Exemplaires vus en favori lors de la dernière recherche de copies.
+      const starredOwnedCardIds = new Set();
+
       function createSaleError(message, code) {
         const error = new Error(message);
         error.code = code;
@@ -114,6 +117,8 @@
               card.ownedCardId
             ) {
               candidates.push(card);
+              if (card.starred) starredOwnedCardIds.add(card.ownedCardId);
+              else starredOwnedCardIds.delete(card.ownedCardId);
             }
           }
 
@@ -154,9 +159,10 @@
           console.debug('[WM Average] /marketplace/mine indisponible, fallback copie collection', error);
         }
 
-        const eligible = candidates.filter(
-          (candidate) => !excludedIds.has(candidate.ownedCardId)
-        );
+        // Les exemplaires non favoris passent en premier : on ne vend un favori qu'en dernier recours.
+        const eligible = candidates
+          .filter((candidate) => !excludedIds.has(candidate.ownedCardId))
+          .sort((a, b) => Number(Boolean(a.starred)) - Number(Boolean(b.starred)));
 
         if (!eligible.length) {
           const excludedIsListed = mine && candidates.some(
@@ -255,7 +261,8 @@
           catalogueCardId,
           title,
           baseAmount,
-          durationMinutes
+          durationMinutes,
+          allowStarred
         } = event.detail || {};
 
         if (!requestId || !catalogueCardId) return;
@@ -278,6 +285,23 @@
         let resolvedOwnedCardId = ownedCardId || null;
         let staleOwnedCardId = null;
 
+        // Seul exemplaire disponible en favori : la page doit confirmer avant la vente.
+        const needsStarredConfirmation = () => {
+          if (allowStarred || !starredOwnedCardIds.has(resolvedOwnedCardId)) return false;
+
+          window.dispatchEvent(new CustomEvent('wm-average-create-listing-result', {
+            detail: {
+              requestId,
+              catalogueCardId,
+              ownedCardId: resolvedOwnedCardId,
+              staleOwnedCardId,
+              needsStarredConfirmation: true,
+              ok: false
+            }
+          }));
+          return true;
+        };
+
         try {
           const mine = await fetchMarketplaceMine(false).catch(() => null);
 
@@ -299,6 +323,8 @@
               title,
               new Set(staleOwnedCardId ? [staleOwnedCardId] : [])
             );
+
+            if (needsStarredConfirmation()) return;
           }
 
           let { response, json } = await submitMarketplaceListing(
@@ -324,6 +350,8 @@
               new Set([staleOwnedCardId]),
               true
             );
+
+            if (needsStarredConfirmation()) return;
 
             ({ response, json } = await submitMarketplaceListing(
               resolvedOwnedCardId,

@@ -5,7 +5,7 @@
     create(runtime) {
       const {
         originalFetch, MAX_COLLECTION_PAGES, RARITY_ORDER,
-        extractCards, fetchJsonRetry
+        extractCards, fetchJsonRetry, mapTags
       } = runtime.core;
 
       function extractRarityCounts(json) {
@@ -72,15 +72,16 @@
         }
       }
 
-      async function fetchCollectionPage(page, stats = false) {
+      async function fetchCollectionPage(page, stats = false, { tagId = null, sort = 'rarity' } = {}) {
         let attempt = 0;
+        const tagQuery = tagId ? `&tag_id=${encodeURIComponent(tagId)}` : '';
 
         while (true) {
           attempt += 1;
 
           try {
             const response = await originalFetch(
-              `/api/my-collection?sort=rarity&page=${encodeURIComponent(page)}&stats=${stats ? 1 : 0}`,
+              `/api/my-collection?sort=${encodeURIComponent(sort)}${tagQuery}&page=${encodeURIComponent(page)}&stats=${stats ? 1 : 0}`,
               {
                 method: 'GET',
                 credentials: 'include',
@@ -118,6 +119,141 @@
 
           const delayMs = Math.min(5000, 500 * (2 ** Math.min(attempt - 1, 4)));
           await new Promise((resolve) => setTimeout(resolve, delayMs));
+        }
+      }
+
+      function dedupeCards(pages) {
+        const deduped = new Map();
+
+        for (const pageCards of pages) {
+          if (!Array.isArray(pageCards)) continue;
+
+          for (const card of pageCards) {
+            const existing = deduped.get(card.id);
+
+            if (existing) {
+              const ownershipIds = new Set([
+                ...(Array.isArray(existing.ownedCardIds) ? existing.ownedCardIds : []),
+                ...(Array.isArray(card.ownedCardIds) ? card.ownedCardIds : []),
+                card.ownedCardId
+              ].filter(Boolean));
+
+              existing.ownedCardIds = [...ownershipIds];
+              // Chaque exemplaire est une entrée distincte avec count = 1.
+              existing.count = Math.max(
+                existing.count || 1,
+                card.count || 1,
+                existing.ownedCardIds.length
+              );
+              if (!existing.ownedCardId && existing.ownedCardIds.length) {
+                existing.ownedCardId = existing.ownedCardIds[0];
+              }
+
+              // Favori et étiquettes sont portés par chaque exemplaire possédé.
+              existing.starred = Boolean(existing.starred || card.starred);
+              existing.tags = mapTags(existing.tags, card.tags);
+            } else {
+              deduped.set(card.id, { ...card });
+            }
+          }
+        }
+
+        return deduped;
+      }
+
+      // Cartes portant une étiquette, via le même filtre que la page Collection du site.
+      async function fetchTagCards(requestId, tagId) {
+        try {
+          const first = await fetchCollectionPage(0, false, { tagId });
+          const firstCards = extractCards(first);
+          const total = Number(first?.total);
+          const pageSize = firstCards.length;
+          const pages = [firstCards];
+
+          const totalPages = Number.isFinite(total) && total > 0 && pageSize > 0
+            ? Math.ceil(total / pageSize)
+            : 1;
+
+          for (let page = 1; page < Math.min(totalPages, MAX_COLLECTION_PAGES); page += 1) {
+            const cards = extractCards(await fetchCollectionPage(page, false, { tagId }));
+            pages.push(cards);
+            if (cards.length < pageSize) break;
+          }
+
+          window.dispatchEvent(new CustomEvent('wm-average-tag-cards', {
+            detail: {
+              requestId,
+              tagId,
+              ok: true,
+              cards: [...dedupeCards(pages).values()]
+            }
+          }));
+        } catch (error) {
+          window.dispatchEvent(new CustomEvent('wm-average-tag-cards', {
+            detail: {
+              requestId,
+              tagId,
+              ok: false,
+              error: String(error?.message || error)
+            }
+          }));
+        }
+      }
+
+      // Cartes en favori : le tri « starred » du site les place en tête, on s'arrête
+      // à la première page qui contient une carte non favorite.
+      async function fetchStarredCards(requestId) {
+        try {
+          const pages = [];
+          let pageSize = 0;
+
+          for (let page = 0; page < MAX_COLLECTION_PAGES; page += 1) {
+            const cards = extractCards(await fetchCollectionPage(page, false, { sort: 'starred' }));
+            const starred = cards.filter((card) => card.starred);
+            pages.push(starred);
+
+            if (page === 0) pageSize = cards.length;
+            if (!cards.length || starred.length < cards.length || cards.length < pageSize) break;
+          }
+
+          window.dispatchEvent(new CustomEvent('wm-average-starred-cards', {
+            detail: {
+              requestId,
+              ok: true,
+              cards: [...dedupeCards(pages).values()]
+            }
+          }));
+        } catch (error) {
+          window.dispatchEvent(new CustomEvent('wm-average-starred-cards', {
+            detail: {
+              requestId,
+              ok: false,
+              error: String(error?.message || error)
+            }
+          }));
+        }
+      }
+
+      // Liste complète des étiquettes du joueur (renvoyée avec les stats de la collection).
+      async function fetchTagOptions(requestId) {
+        try {
+          const json = await fetchJsonRetry(
+            '/api/my-collection?sort=rarity&page=0&stats=1',
+            {
+              method: 'GET',
+              credentials: 'include',
+              headers: { accept: '*/*' }
+            },
+            { label: 'Étiquettes', maxAttempts: 3 }
+          );
+
+          window.dispatchEvent(new CustomEvent('wm-average-tag-options', {
+            detail: { requestId, ok: true, tags: mapTags(json?.tagOptions) }
+          }));
+        } catch (error) {
+          window.dispatchEvent(new CustomEvent('wm-average-tag-options', {
+            detail: { requestId, ok: false, error: String(error?.message || error) }
+          }));
         }
       }
 
@@ -214,30 +350,7 @@
             }
           }
 
-          const deduped = new Map();
-          for (const pageCards of pages) {
-            if (!Array.isArray(pageCards)) continue;
-
-            for (const card of pageCards) {
-              const existing = deduped.get(card.id);
-
-              if (existing) {
-                existing.count = Math.max(existing.count || 1, card.count || 1);
-                const ownershipIds = new Set([
-                  ...(Array.isArray(existing.ownedCardIds) ? existing.ownedCardIds : []),
-                  ...(Array.isArray(card.ownedCardIds) ? card.ownedCardIds : []),
-                  card.ownedCardId
-                ].filter(Boolean));
-
-                existing.ownedCardIds = [...ownershipIds];
-                if (!existing.ownedCardId && existing.ownedCardIds.length) {
-                  existing.ownedCardId = existing.ownedCardIds[0];
-                }
-              } else {
-                deduped.set(card.id, { ...card });
-              }
-            }
-          }
+          const deduped = dedupeCards(pages);
 
           const complete =
             lowestRequestedIndex >= RARITY_ORDER.length - 1 &&
@@ -271,7 +384,7 @@
       }
 
 
-      return { fetchAllCollection };
+      return { fetchAllCollection, fetchTagCards, fetchStarredCards, fetchTagOptions };
     }
   };
 })();

@@ -113,6 +113,24 @@
         runtime.collection.fetchAllCollection(requestId, selectedRarities);
       });
 
+      window.addEventListener('wm-average-load-tag-cards', (event) => {
+        const { requestId, tagId } = event.detail || {};
+        if (!requestId || !tagId) return;
+        runtime.collection.fetchTagCards(requestId, String(tagId));
+      });
+
+      window.addEventListener('wm-average-load-starred-cards', (event) => {
+        const requestId = event.detail?.requestId;
+        if (!requestId) return;
+        runtime.collection.fetchStarredCards(requestId);
+      });
+
+      window.addEventListener('wm-average-load-tag-options', (event) => {
+        const requestId = event.detail?.requestId;
+        if (!requestId) return;
+        runtime.collection.fetchTagOptions(requestId);
+      });
+
       window.addEventListener('wm-average-open-all-packs', (event) => {
         const requestId = event.detail?.requestId;
         if (!requestId) return;
