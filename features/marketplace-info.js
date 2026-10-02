@@ -58,7 +58,11 @@
 
       function textFor(entry) {
         const start = entry.start == null ? '?' : numberFormat.format(entry.start);
-        return `Départ ${start} W · ${entry.bids == null ? '? enchères' : bidsLabel(entry.bids)}`;
+        const bids = entry.bids;
+        return {
+          text: `Départ ${start} W · ${bids == null ? '? enchères' : bidsLabel(bids)}`,
+          tone: bids == null ? null : (bids > 0 ? 'some' : 'none')
+        };
       }
 
       function readCard(anchor) {
@@ -73,7 +77,7 @@
         };
       }
 
-      function setInfo(anchor, text) {
+      function setInfo(anchor, text, tone) {
         let info = anchor.querySelector(`:scope > .${INFO_CLASS}`);
         if (!info) {
           info = document.createElement('div');
@@ -81,6 +85,8 @@
           anchor.append(info);
         }
         if (info.textContent !== text) info.textContent = text;
+        info.classList.toggle('is-zero-bids', tone === 'none');
+        info.classList.toggle('has-bids', tone === 'some');
       }
 
       function removeAll() {
@@ -167,30 +173,31 @@
         for (const anchor of document.querySelectorAll('a[href^="/marketplace/"]')) {
           const match = AUCTION_HREF.exec(anchor.getAttribute('href') || '');
           if (!match) continue;
-
+        
           const card = readCard(anchor);
           if (!card || card.amount == null) continue;
-
+        
           if (!card.hasBid) {
-            setInfo(anchor, `Départ ${numberFormat.format(card.amount)} W · 0 enchère`);
+            setInfo(anchor, `Départ ${numberFormat.format(card.amount)} W · 0 enchère`, 'none');
             continue;
           }
-
+        
           const id = match[1];
           const known = cache.get(id);
-
+        
           if (known) {
-            setInfo(anchor, textFor(known));
+            const { text, tone } = textFor(known);
+            setInfo(anchor, text, tone);
             // les mises ne font que monter : si la mise affichée n'est pas plus haute que celle du cache, il est à jour
             if (card.amount <= known.amount) continue;
           } else if (failures.has(id)) {
-            setInfo(anchor, 'Départ et enchères indisponibles');
+            setInfo(anchor, 'Départ et enchères indisponibles', null);
           } else {
-            setInfo(anchor, 'Départ … · … enchères');
+            setInfo(anchor, 'Départ … · … enchères', null);
           }
-
-          if (Date.now() < (failures.get(id) || 0)) continue; // échec récent : on attend avant de réessayer
-
+        
+          if (Date.now() < (failures.get(id) || 0)) continue;
+        
           anchor.dataset.wmAuctionId = id;
           anchor.dataset.wmAuctionAmount = String(card.amount);
           getObserver().observe(anchor);
