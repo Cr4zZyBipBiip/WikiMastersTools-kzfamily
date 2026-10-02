@@ -249,7 +249,8 @@
             const { text, tone, delta } = textFor(known, (known.bids ?? 0) - before.bids, known.amount - before.amount);
             setInfo(anchor, text, tone, delta);
             // les mises ne font que monter : si la mise affichée n'est pas plus haute que celle du cache, il est à jour
-            if (card.amount <= known.amount) continue;
+            // sauf si le cache dit « 0 enchère » alors qu'une mise existe (1re mise placée pile au prix de départ)
+            if (card.amount <= known.amount && (known.bids ?? 0) > 0) continue;
           } else if (failures.has(id)) {
             setInfo(anchor, 'Départ et enchères indisponibles', null);
           } else {
