@@ -1,0 +1,203 @@
+(() => {
+  const registry = window.__wmAverageFeatures ||= {};
+
+  // Page Marché : sous chaque annonce, affiche le prix de départ et le nombre d'enchères.
+  //  - sans mise : le site affiche « Mise de départ » → départ lu dans la carte, 0 enchère, aucune requête ;
+  //  - avec mises : le site affiche « Mise actuelle » → départ et nombre d'enchères lus dans la fiche de l'annonce.
+  // Les informations déjà connues sont gardées en cache (localStorage) : tant que la mise actuelle affichée n'est pas
+  // supérieure à celle du cache, rien n'est redemandé ; sinon on met à jour le texte (l'ancien reste affiché en attendant).
+  registry.marketplaceInfo = {
+    create(runtime) {
+      const { isMarketplacePage, isMarketplaceDetailPage, readLocalValue, writeLocalValue } = runtime.core;
+
+      const INFO_CLASS = 'wm-marketplace-info';
+      const STORAGE_KEY = 'wm_marketplace_info_v1';
+      const AUCTION_HREF = /^\/marketplace\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/?$/i;
+      const MAX_PARALLEL = 2;
+      const REQUEST_GAP_MS = 150;
+      const RETRY_AFTER_MS = 60 * 1000;
+      const KEEP_MS = 3 * 24 * 60 * 60 * 1000; // une enchère dure 24 h au plus : on oublie le reste
+      const MAX_CACHED = 500;
+
+      // idAnnonce -> { amount (mise actuelle connue), start, bids, t }
+      const cache = loadCache();
+      const failures = new Map(); // idAnnonce -> instant du prochain essai
+      const queue = [];
+      const queued = new Set();
+      let running = 0;
+      let observer = null;
+
+      const numberFormat = new Intl.NumberFormat('fr-FR');
+
+      function loadCache() {
+        const map = new Map();
+        const stored = readLocalValue(STORAGE_KEY);
+        if (!stored || typeof stored !== 'object') return map;
+
+        for (const [id, entry] of Object.entries(stored)) {
+          if (entry && Number.isFinite(entry.amount) && Number.isFinite(entry.t) && Date.now() - entry.t < KEEP_MS) {
+            map.set(id, entry);
+          }
+        }
+        return map;
+      }
+
+      function persist() {
+        const entries = [...cache.entries()].sort((a, b) => b[1].t - a[1].t).slice(0, MAX_CACHED);
+        writeLocalValue(STORAGE_KEY, Object.fromEntries(entries));
+      }
+
+      function parseAmount(text) {
+        const digits = String(text || '').replace(/[^\d]/g, '');
+        return digits ? Number(digits) : null;
+      }
+
+      function bidsLabel(count) {
+        return `${count} enchère${count > 1 ? 's' : ''}`;
+      }
+
+      function textFor(entry) {
+        const start = entry.start == null ? '?' : numberFormat.format(entry.start);
+        return `Départ ${start} W · ${entry.bids == null ? '? enchères' : bidsLabel(entry.bids)}`;
+      }
+
+      function readCard(anchor) {
+        const label = [...anchor.querySelectorAll('span')]
+          .find((span) => /^mise (de départ|actuelle)$/i.test(span.textContent.trim()));
+        if (!label || !label.parentElement) return null;
+
+        const holder = label.parentElement;
+        return {
+          hasBid: /actuelle/i.test(label.textContent),
+          amount: parseAmount(holder.textContent.replace(label.textContent, ''))
+        };
+      }
+
+      function setInfo(anchor, text) {
+        let info = anchor.querySelector(`:scope > .${INFO_CLASS}`);
+        if (!info) {
+          info = document.createElement('div');
+          info.className = INFO_CLASS;
+          anchor.append(info);
+        }
+        if (info.textContent !== text) info.textContent = text;
+      }
+
+      function removeAll() {
+        for (const node of document.querySelectorAll(`.${INFO_CLASS}`)) node.remove();
+      }
+
+      async function load(id, shownAmount) {
+        try {
+          const response = await fetch(`/api/marketplace/${encodeURIComponent(id)}`, {
+            method: 'GET',
+            credentials: 'include',
+            headers: { accept: '*/*' }
+          });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+          const json = await response.json();
+          const auction = json?.auction || {};
+          const start = Number(auction.listing_base_amount ?? auction.base_amount);
+          const current = Number(auction.current_bid ?? auction.effective_bid);
+
+          cache.set(id, {
+            // mise actuelle réellement connue (la carte affichée peut avoir quelques secondes de retard)
+            amount: Number.isFinite(current) ? Math.max(current, shownAmount) : shownAmount,
+            start: Number.isFinite(start) ? start : null,
+            bids: Array.isArray(json?.bids) ? json.bids.length : null,
+            t: Date.now()
+          });
+          failures.delete(id);
+          persist();
+        } catch (_) {
+          failures.set(id, Date.now() + RETRY_AFTER_MS);
+        }
+      }
+
+      function pump() {
+        while (running < MAX_PARALLEL && queue.length) {
+          const { id, amount } = queue.shift();
+          queued.delete(id);
+          running += 1;
+
+          load(id, amount).finally(() => {
+            running -= 1;
+            render();
+            setTimeout(pump, REQUEST_GAP_MS);
+          });
+        }
+      }
+
+      function enqueue(id, amount) {
+        if (queued.has(id)) return;
+        queued.add(id);
+        queue.push({ id, amount });
+        pump();
+      }
+
+      function getObserver() {
+        observer ||= new IntersectionObserver((entries) => {
+          for (const entry of entries) {
+            if (!entry.isIntersecting) continue;
+            observer.unobserve(entry.target);
+            const id = entry.target.dataset.wmAuctionId;
+            const amount = Number(entry.target.dataset.wmAuctionAmount);
+            if (id && Number.isFinite(amount)) enqueue(id, amount);
+          }
+        }, { rootMargin: '300px 0px' });
+        return observer;
+      }
+
+      function isBidsPage() {
+        try {
+          return new URLSearchParams(location.search).get('wm') === 'bids';
+        } catch (_) {
+          return false;
+        }
+      }
+
+      function render() {
+        if (!runtime.settings.isEnabled('marketplaceInfo')) {
+          removeAll();
+          return;
+        }
+        if (!isMarketplacePage() || isMarketplaceDetailPage() || isBidsPage()) return;
+
+        for (const anchor of document.querySelectorAll('a[href^="/marketplace/"]')) {
+          const match = AUCTION_HREF.exec(anchor.getAttribute('href') || '');
+          if (!match) continue;
+
+          const card = readCard(anchor);
+          if (!card || card.amount == null) continue;
+
+          if (!card.hasBid) {
+            setInfo(anchor, `Départ ${numberFormat.format(card.amount)} W · 0 enchère`);
+            continue;
+          }
+
+          const id = match[1];
+          const known = cache.get(id);
+
+          if (known) {
+            setInfo(anchor, textFor(known));
+            // les mises ne font que monter : si la mise affichée n'est pas plus haute que celle du cache, il est à jour
+            if (card.amount <= known.amount) continue;
+          } else if (failures.has(id)) {
+            setInfo(anchor, 'Départ et enchères indisponibles');
+          } else {
+            setInfo(anchor, 'Départ … · … enchères');
+          }
+
+          if (Date.now() < (failures.get(id) || 0)) continue; // échec récent : on attend avant de réessayer
+
+          anchor.dataset.wmAuctionId = id;
+          anchor.dataset.wmAuctionAmount = String(card.amount);
+          getObserver().observe(anchor);
+        }
+      }
+
+      return { render };
+    }
+  };
+})();
