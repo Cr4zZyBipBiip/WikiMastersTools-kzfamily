@@ -22,8 +22,8 @@
       // idAnnonce -> { amount (mise actuelle connue), start, bids, t }
       const cache = loadCache();
       const failures = new Map(); // idAnnonce -> instant du prochain essai
-      // nombre d'enchères connu à la première apparition de l'annonce dans cette page : sert à afficher « +N » (nouvelles
-      // enchères depuis le cache précédent, c'est-à-dire depuis ta dernière visite ou le dernier chargement)
+      // nombre d'enchères et mise actuelle connus à la première apparition de l'annonce dans cette page : servent à afficher
+      // « (+N) » et « +X W » (nouveautés depuis le cache précédent, c'est-à-dire depuis ta dernière visite ou le dernier chargement)
       const baseline = new Map();
       const queue = [];
       const queued = new Set();
@@ -59,12 +59,13 @@
         return `${count} enchère${count > 1 ? 's' : ''}`;
       }
 
-      function textFor(entry, gain = 0) {
+      function textFor(entry, gain = 0, priceGain = 0) {
         const start = entry.start == null ? '?' : numberFormat.format(entry.start);
         const bids = entry.bids;
         const news = gain > 0 ? ` (+${gain})` : '';
+        const raise = priceGain > 0 ? ` · +${numberFormat.format(priceGain)} W` : '';
         return {
-          text: `Départ ${start} W · ${bids == null ? '? enchères' : bidsLabel(bids)}${news}`,
+          text: `Départ ${start} W · ${bids == null ? '? enchères' : bidsLabel(bids)}${news}${raise}`,
           tone: bids == null ? null : (bids > 0 ? 'some' : 'none')
         };
       }
@@ -91,7 +92,7 @@
         if (info.textContent !== text) info.textContent = text;
         info.classList.toggle('is-zero-bids', tone === 'none');
         info.classList.toggle('has-bids', tone === 'some');
-        info.classList.toggle('has-new-bids', /\(\+\d+\)$/.test(text));
+        info.classList.toggle('has-new-bids', /(\(\+\d+\)| · \+[\d\s  ]+ W)$/.test(text));
       }
 
       function removeAll() {
@@ -208,7 +209,7 @@
           if (!card.hasBid) {
             setInfo(anchor, `Départ ${numberFormat.format(card.amount)} W · 0 enchère`, 'none');
             // on retient « 0 enchère » (sans requête) : à la prochaine visite, les enchères arrivées depuis s'afficheront en « +N »
-            if (!baseline.has(id)) baseline.set(id, 0);
+            if (!baseline.has(id)) baseline.set(id, { bids: 0, amount: card.amount });
             if (!cache.has(id)) {
               cache.set(id, { amount: card.amount, start: card.amount, bids: 0, t: Date.now() });
               dirty = true;
@@ -219,8 +220,9 @@
           const known = cache.get(id);
 
           if (known) {
-            if (!baseline.has(id)) baseline.set(id, known.bids ?? 0);
-            const { text, tone } = textFor(known, (known.bids ?? 0) - baseline.get(id));
+            if (!baseline.has(id)) baseline.set(id, { bids: known.bids ?? 0, amount: known.amount });
+            const before = baseline.get(id);
+            const { text, tone } = textFor(known, (known.bids ?? 0) - before.bids, known.amount - before.amount);
             setInfo(anchor, text, tone);
             // les mises ne font que monter : si la mise affichée n'est pas plus haute que celle du cache, il est à jour
             if (card.amount <= known.amount) continue;
