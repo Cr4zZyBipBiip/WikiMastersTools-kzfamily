@@ -3116,3 +3116,11 @@ html.wm-hide-card-stats div[class*="fixed"][class*="inset-0"] div.grid:has(> .ca
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
+
+.wm-marketplace-info.is-zero-bids {
+  color: #fca5a5;
+}
+
+.wm-marketplace-info.has-bids {
+  color: #86efac;
+}
