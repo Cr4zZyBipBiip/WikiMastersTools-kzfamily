@@ -3124,3 +3124,7 @@ html.wm-hide-card-stats div[class*="fixed"][class*="inset-0"] div.grid:has(> .ca
 .wm-marketplace-info.has-bids {
   color: #86efac;
 }
+
+.wm-marketplace-info.has-new-bids {
+  font-weight: 800;
+}
