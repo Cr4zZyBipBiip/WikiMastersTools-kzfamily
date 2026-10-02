@@ -1,7 +1,7 @@
 (() => {
   const registry = window.__wmAverageFeatures ||= {};
 
-  // Page Marché : sous chaque annonce, affiche le prix de départ et le nombre d'enchères.
+  // Page Marché, onglet « Mes ventes » uniquement : sous chaque annonce, affiche le prix de départ et le nombre d'enchères.
   //  - sans mise : le site affiche « Mise de départ » → départ lu dans la carte, 0 enchère, aucune requête ;
   //  - avec mises : le site affiche « Mise actuelle » → départ et nombre d'enchères lus dans la fiche de l'annonce.
   // Les informations déjà connues sont gardées en cache (localStorage) : tant que la mise actuelle affichée n'est pas
@@ -122,6 +122,11 @@
       }
 
       function pump() {
+        if (!isMySalesTab()) { // on a quitté « Mes ventes » : on abandonne les requêtes en attente
+          queue.length = 0;
+          queued.clear();
+          return;
+        }
         while (running < MAX_PARALLEL && queue.length) {
           const { id, amount } = queue.shift();
           queued.delete(id);
@@ -146,6 +151,7 @@
         observer ||= new IntersectionObserver((entries) => {
           for (const entry of entries) {
             if (!entry.isIntersecting) continue;
+            if (!isMySalesTab()) { observer.unobserve(entry.target); continue; }
             observer.unobserve(entry.target);
             const id = entry.target.dataset.wmAuctionId;
             const amount = Number(entry.target.dataset.wmAuctionAmount);
@@ -153,6 +159,15 @@
           }
         }, { rootMargin: '300px 0px' });
         return observer;
+      }
+
+      // Onglet actif de la page Marché : le site marque l'onglet courant d'un soulignement (border-b-2).
+      // L'affichage ne concerne que « Mes ventes » : ni la liste générale (« Parcourir »), ni les autres onglets.
+      function isMySalesTab() {
+        const tabs = [...document.querySelectorAll('main button')]
+          .filter((button) => /^(Parcourir|Mes ventes|Mes enchères|Gagnées|Historique)/i.test(button.textContent.trim()));
+        const active = tabs.find((button) => /(^|\s)border-b-2(\s|$)/.test(button.className));
+        return Boolean(active && /^Mes ventes/i.test(active.textContent.trim()));
       }
 
       function isBidsPage() {
@@ -169,6 +184,10 @@
           return;
         }
         if (!isMarketplacePage() || isMarketplaceDetailPage() || isBidsPage()) return;
+        if (!isMySalesTab()) {
+          removeAll(); // autre onglet : aucune info affichée, aucune requête
+          return;
+        }
 
         for (const anchor of document.querySelectorAll('a[href^="/marketplace/"]')) {
           const match = AUCTION_HREF.exec(anchor.getAttribute('href') || '');
