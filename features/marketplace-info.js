@@ -62,11 +62,15 @@
       function textFor(entry, gain = 0, priceGain = 0) {
         const start = entry.start == null ? '?' : numberFormat.format(entry.start);
         const bids = entry.bids;
-        const news = gain > 0 ? ` (+${gain})` : '';
-        const raise = priceGain > 0 ? ` · +${numberFormat.format(priceGain)} W` : '';
+        // nouveautés depuis le cache précédent, sur une 2e ligne : d'abord la hausse du prix, puis les enchères en plus
+        const delta = [
+          priceGain > 0 ? `+${numberFormat.format(priceGain)} W` : null,
+          gain > 0 ? `+${gain} enchère${gain > 1 ? 's' : ''}` : null
+        ].filter(Boolean).join(' · ');
         return {
-          text: `Départ ${start} W · ${bids == null ? '? enchères' : bidsLabel(bids)}${news}${raise}`,
-          tone: bids == null ? null : (bids > 0 ? 'some' : 'none')
+          text: `Départ ${start} W · ${bids == null ? '? enchères' : bidsLabel(bids)}`,
+          tone: bids == null ? null : (bids > 0 ? 'some' : 'none'),
+          delta
         };
       }
 
@@ -82,17 +86,37 @@
         };
       }
 
-      function setInfo(anchor, text, tone) {
+      function setInfo(anchor, text, tone, delta = '') {
         let info = anchor.querySelector(`:scope > .${INFO_CLASS}`);
         if (!info) {
           info = document.createElement('div');
           info.className = INFO_CLASS;
           anchor.append(info);
         }
-        if (info.textContent !== text) info.textContent = text;
+
+        let main = info.querySelector(':scope > .wm-marketplace-info-main');
+        if (!main) {
+          info.textContent = '';
+          main = document.createElement('div');
+          main.className = 'wm-marketplace-info-main';
+          info.append(main);
+        }
+        if (main.textContent !== text) main.textContent = text;
+
+        let news = info.querySelector(':scope > .wm-marketplace-info-delta');
+        if (delta) {
+          if (!news) {
+            news = document.createElement('div');
+            news.className = 'wm-marketplace-info-delta';
+            info.append(news);
+          }
+          if (news.textContent !== delta) news.textContent = delta;
+        } else {
+          news?.remove();
+        }
+
         info.classList.toggle('is-zero-bids', tone === 'none');
         info.classList.toggle('has-bids', tone === 'some');
-        info.classList.toggle('has-new-bids', /(\(\+\d+\)| · \+[\d\s  ]+ W)$/.test(text));
       }
 
       function removeAll() {
@@ -222,8 +246,8 @@
           if (known) {
             if (!baseline.has(id)) baseline.set(id, { bids: known.bids ?? 0, amount: known.amount });
             const before = baseline.get(id);
-            const { text, tone } = textFor(known, (known.bids ?? 0) - before.bids, known.amount - before.amount);
-            setInfo(anchor, text, tone);
+            const { text, tone, delta } = textFor(known, (known.bids ?? 0) - before.bids, known.amount - before.amount);
+            setInfo(anchor, text, tone, delta);
             // les mises ne font que monter : si la mise affichée n'est pas plus haute que celle du cache, il est à jour
             if (card.amount <= known.amount) continue;
           } else if (failures.has(id)) {
